@@ -102,5 +102,17 @@ No backticks, no extra commentary—JSON only.
     credit: parsed.credit ?? "Prepared by [Your Name]"
   };
 
+// add a visible marker so we know this version is live
+const result: GenResponse = {
+  student_text: parsed.student_text ?? "Sorry—could not generate.",
+  exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : [],
+  source,
+  credit: (parsed.credit ?? "Prepared by [Your Name]") + " • real-v1"
+};
+const res = new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" }});
+res.headers.set("x-gen-version", "real-v1");
+return res;
+
+
   return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" }});
 }
