@@ -1,3 +1,4 @@
 ﻿name = "levelup-worker"
 main = "src/index.ts"
 compatibility_date = "2025-08-18"
+account_id = "3a4863f48bab7ef0e0dde42418e75707"

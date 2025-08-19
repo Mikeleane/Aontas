@@ -13,12 +13,12 @@ export default function EmbedPage() {
     if (!input.trim()) { setNote("Please paste text or a URL."); return; }
     setNote("Generating…");
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8787";
-      const res = await fetch(base + "/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, cefr, exam, inclusive, locale: "IE" })
-      });
+      const res = await fetch("/api/generate", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ input, cefr, exam, inclusive, locale: "IE" })
+});
+
       if (!res.ok) throw new Error("Server " + res.status);
       const json = await res.json();
       setData(json);
