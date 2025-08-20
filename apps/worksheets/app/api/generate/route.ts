@@ -1,7 +1,6 @@
-﻿
-export const runtime = "edge";
+﻿export const runtime = "edge";
 
-/** -------- Types -------- */
+/* ---------- Types ---------- */
 type ReqBody = {
   input: string;
   cefr: "A2" | "B1" | "B2" | "C1";
@@ -17,14 +16,10 @@ type GenResponse = {
   credit: string;
 };
 
-/** -------- Helpers -------- */
+/* ---------- Helpers ---------- */
 function looksLikeUrl(s: string) {
-  try {
-    const u = new URL(s);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
+  try { const u = new URL(s); return u.protocol === "http:" || u.protocol === "https:"; }
+  catch { return false; }
 }
 
 function stripHtml(html: string) {
@@ -36,72 +31,65 @@ function stripHtml(html: string) {
     .trim();
 }
 
+const RETRYABLE = new Set([429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526]);
+
 async function callOpenAIWithBackoff(body: any, key: string) {
   const url = "https://api.openai.com/v1/chat/completions";
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const tries = 5;
+  for (let attempt = 0; attempt < tries; attempt++) {
     const resp = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      // 45s safety timeout (Edge supports AbortSignal.timeout in modern runtimes)
+      // @ts-ignore
+      signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(45_000) : undefined,
     });
 
-    // Success or non-429 error → return immediately
-    if (resp.status !== 429) return resp;
+    if (!RETRYABLE.has(resp.status)) return resp;
 
-    // 429: respect Retry-After or exponential backoff
+    // Respect Retry-After if present
     const ra = Number(resp.headers.get("retry-after") ?? 0);
-    const waitMs =
-      ra > 0 ? ra * 1000 : (600 * 2 ** attempt) + Math.floor(Math.random() * 400);
-    await new Promise((r) => setTimeout(r, waitMs));
+    const backoff = ra > 0 ? ra * 1000 : (800 * 2 ** attempt) + Math.floor(Math.random() * 400);
+    await new Promise((r) => setTimeout(r, backoff));
   }
 
+  // After max attempts, return a JSON error (503)
   return new Response(
-    JSON.stringify({
-      error: "Upstream busy (rate limited). Please try again shortly.",
-    }),
+    JSON.stringify({ error: "Upstream busy (rate limited). Please try again shortly." }),
     { status: 503, headers: { "Content-Type": "application/json" } }
   );
 }
 
-/** -------- Route -------- */
+/* ---------- Route ---------- */
 export async function POST(req: Request) {
-  const { input, cefr, exam, inclusive, locale = "IE" } =
-    (await req.json()) as ReqBody;
+  const { input, cefr, exam, inclusive, locale = "IE" } = (await req.json()) as ReqBody;
 
-  // 1) Acquire raw text (fetch if URL)
+  // 1) Get raw text (or fetch URL)
   let source = "pasted text";
-  let raw = input?.trim() ?? "";
+  let raw = (input ?? "").trim();
   if (looksLikeUrl(raw)) {
     source = raw;
     try {
-      const r = await fetch(raw, {
-        headers: { Accept: "text/html,*/*;q=0.8" },
-      });
+      const r = await fetch(raw, { headers: { Accept: "text/html,*/*;q=0.8" } });
       const html = await r.text();
-      raw = stripHtml(html).slice(0, 5000); // limit token load
+      raw = stripHtml(html).slice(0, 5000); // keep token load modest
     } catch {
-      // fall back to the URL itself if fetch fails
       raw = input;
     }
   }
-
   if (!raw) {
-    return new Response(
-      JSON.stringify({ error: "Missing input" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Missing input" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
   }
 
   // 2) API key
   const key = process.env.OPENAI_API_KEY;
   if (!key) {
-    return new Response(
-      JSON.stringify({ error: "Missing OPENAI_API_KEY" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY" }), {
+      status: 500, headers: { "Content-Type": "application/json" },
+    });
   }
 
   // 3) Prompt
@@ -127,7 +115,7 @@ RETURN JSON ONLY in this exact shape:
 }
 `.trim();
 
-  // 4) Call the model (with retries on 429)
+  // 4) Call model with retries
   const body = {
     model: "gpt-4o-mini",
     response_format: { type: "json_object" },
@@ -136,14 +124,10 @@ RETURN JSON ONLY in this exact shape:
 
   const api = await callOpenAIWithBackoff(body, key);
 
-  // Always return JSON to the client
   if (!api.ok) {
     const txt = await api.text().catch(() => "");
     return new Response(
-      JSON.stringify({
-        error: `Upstream error ${api.status}`,
-        detail: txt.slice(0, 200),
-      }),
+      JSON.stringify({ error: `Upstream error ${api.status}`, detail: txt.slice(0, 200) }),
       { status: api.status, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -153,15 +137,10 @@ RETURN JSON ONLY in this exact shape:
   const content: string = data?.choices?.[0]?.message?.content ?? "{}";
 
   let parsed: Partial<GenResponse> = {};
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    // leave parsed as {}
-  }
+  try { parsed = JSON.parse(content); } catch {}
 
   const result: GenResponse = {
-    student_text:
-      parsed.student_text ?? "Sorry—could not generate a student text.",
+    student_text: parsed.student_text ?? "Sorry—could not generate a student text.",
     exercises: Array.isArray(parsed.exercises)
       ? parsed.exercises.slice(0, 6)
       : ["Reading: True/False/Not Given (5)", "Short Answer (3)"],
@@ -169,9 +148,7 @@ RETURN JSON ONLY in this exact shape:
     credit: (parsed.credit ?? "Prepared by [Your Name]") + " • real-v1",
   };
 
-  const res = new Response(JSON.stringify(result), {
-    headers: { "Content-Type": "application/json" },
-  });
+  const res = new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   res.headers.set("x-gen-version", "real-v1");
   return res;
 }
