@@ -32,17 +32,15 @@ function stripHtml(html: string) {
 export async function POST(req: Request) {
   const { input, cefr, exam, inclusive, locale = "IE" } = (await req.json()) as ReqBody;
 
-  // 1) Get raw text (fetch if a URL was provided)
+  // 1) Get raw text (fetch if URL)
   let source = "pasted text";
   let raw = input || "";
   if (looksLikeUrl(input)) {
     source = input;
     try {
-      const r = await fetch(input, { headers: { "Accept": "text/html,*/*;q=0.8" } });
-      const html = await r.text();
-      raw = stripHtml(html).slice(0, 6000); // keep it modest for token cost
+      const r = await fetch(input, { headers: { Accept: "text/html,*/*;q=0.8" } });
+      raw = stripHtml(await r.text()).slice(0, 8000);
     } catch {
-      // if fetch fails, fall back to the original string
       raw = input;
     }
   }
@@ -51,60 +49,55 @@ export async function POST(req: Request) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return new Response("Missing OPENAI_API_KEY", { status: 500 });
 
-  // 2) Build safe prompt
+  // 2) Prompt
   const prompt = `
-You are an ESL materials writer. Produce outputs that are safe, neutral, and compliant.
+You are an ESL materials writer. Create a neutral, inclusive student text and exercises.
 
-Input text (may be a page extract): <<<${raw}>>>.
-Context:
-- CEFR level: ${cefr}
-- Target exam style: ${exam}
-- Locale: ${locale}
-- Inclusive profile: ${inclusive ? "ON" : "OFF"} (use people-first wording; avoid stereotypes; if ON, prefer gender-neutral phrasing where sensible).
-- Compliant Mode: link or cite the original if known; avoid long quotes; avoid ridicule; no harmful content.
+INPUT TEXT:
+<<<${raw}>>>
 
-Return a strict JSON object with keys:
+CONSTRAINTS:
+- CEFR: ${cefr}; Exam style: ${exam}; Locale: ${locale}
+- Length for "student_text": about 200–260 words.
+- Factual tone; people-first language; if Inclusive profile is ON, prefer gender-neutral phrasing where sensible.
+- If the input is sensitive, summarise respectfully and avoid graphic detail.
+
+RETURN JSON ONLY:
 {
-  "student_text": string,   // ${cefr} level, ~180–260 words, neutral tone
-  "exercises": string[],    // 2–3 items, e.g. "Reading: True/False/Not Given (5)", "Short Answer (3)"
-  "source": string,         // use provided URL or "pasted text"
-  "credit": string          // "Prepared by [Your Name]"
+  "student_text": "string (~200–260 words, ${cefr})",
+  "exercises": ["Reading: True/False/Not Given (5)", "Short Answer (3)"],
+  "source": "${source}",
+  "credit": "Prepared by [Your Name]"
 }
-No backticks, no extra commentary—JSON only.
 `;
 
   // 3) Call the model
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+  const api = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
-      messages: [{ role: "user", content: prompt }]
-    })
+      messages: [{ role: "user", content: prompt }],
+    }),
   });
+  if (!api.ok) return new Response(`Upstream error ${api.status}`, { status: 502 });
 
-  if (!resp.ok) {
-    return new Response(`Upstream error ${resp.status}`, { status: 502 });
-  }
-
-  const data = await resp.json();
+  const data = await api.json();
   const content = data?.choices?.[0]?.message?.content ?? "{}";
 
-  // 4) Parse JSON safely and enforce source/credit defaults
-// 4) Parse JSON safely and enforce source/credit defaults
-let parsed: Partial<GenResponse> = {};
-try { parsed = JSON.parse(content); } catch {}
+  // 4) Parse + shape output (ONE declaration of `result`)
+  let parsed: Partial<GenResponse> = {};
+  try { parsed = JSON.parse(content); } catch {}
 
-const result: GenResponse = {
-  student_text: parsed.student_text ?? "Sorry—could not generate.",
-  exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : [],
-  source,
-  credit: (parsed.credit ?? "Prepared by [Your Name]") + " • real-v1"
-};
+  const result: GenResponse = {
+    student_text: parsed.student_text ?? "Sorry—could not generate.",
+    exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : [],
+    source,
+    credit: (parsed.credit ?? "Prepared by [Your Name]") + " • real-v1",
+  };
 
-const res = new Response(JSON.stringify(result), {
-  headers: { "Content-Type": "application/json" }
-});
-res.headers.set("x-gen-version", "real-v1");
-return res;
+  const res = new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
+  res.headers.set("x-gen-version", "real-v1");
+  return res;
+}
