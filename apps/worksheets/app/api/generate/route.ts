@@ -92,27 +92,19 @@ No backticks, no extra commentary—JSON only.
   const content = data?.choices?.[0]?.message?.content ?? "{}";
 
   // 4) Parse JSON safely and enforce source/credit defaults
-  let parsed: Partial<GenResponse> = {};
-  try { parsed = JSON.parse(content); } catch { /* fall through */ }
+// 4) Parse JSON safely and enforce source/credit defaults
+let parsed: Partial<GenResponse> = {};
+try { parsed = JSON.parse(content); } catch {}
 
-  const result: GenResponse = {
-    student_text: parsed.student_text ?? "Sorry—could not generate.",
-    exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : [],
-    source,
-    credit: parsed.credit ?? "Prepared by [Your Name]"
-  };
-
-// add a visible marker so we know this version is live
 const result: GenResponse = {
   student_text: parsed.student_text ?? "Sorry—could not generate.",
   exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : [],
   source,
   credit: (parsed.credit ?? "Prepared by [Your Name]") + " • real-v1"
 };
-const res = new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" }});
+
+const res = new Response(JSON.stringify(result), {
+  headers: { "Content-Type": "application/json" }
+});
 res.headers.set("x-gen-version", "real-v1");
 return res;
-
-
-  return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" }});
-}
