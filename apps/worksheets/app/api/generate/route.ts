@@ -1,4 +1,6 @@
 ﻿export const runtime = "edge";
+// Optional (plan-dependent): you can declare maxDuration for Edge.
+// export const maxDuration = 30; // Hobby ~30s. Pro can be higher.
 
 /* ---------- Types ---------- */
 type ReqBody = {
@@ -31,30 +33,50 @@ function stripHtml(html: string) {
     .trim();
 }
 
-const RETRYABLE = new Set([429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526]);
+// Tiny utility to sleep but never exceed the remaining budget
+async function sleepWithinBudget(ms: number, leftMs: number) {
+  await new Promise(res => setTimeout(res, Math.max(0, Math.min(ms, leftMs))));
+}
 
-async function callOpenAIWithBackoff(body: any, key: string) {
+/* ---------- OpenAI call with strict budget ---------- */
+async function callOpenAIWithinBudget(body: any, key: string, budgetMs: number) {
   const url = "https://api.openai.com/v1/chat/completions";
-  const tries = 5;
+  const start = Date.now();
+  const tries = 3;
+
   for (let attempt = 0; attempt < tries; attempt++) {
+    const elapsed = Date.now() - start;
+    const left = budgetMs - elapsed;
+    if (left <= 0) break;
+
+    // Give the OpenAI call at most 12s or whatever budget remains
+    const perCall = Math.min(12_000, left);
+    // @ts-ignore - Edge supports AbortSignal.timeout in modern runtimes
+    const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout
+      ? AbortSignal.timeout(perCall)
+      : undefined;
+
     const resp = await fetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      // 45s safety timeout (Edge supports AbortSignal.timeout in modern runtimes)
-      // @ts-ignore
-      signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(45_000) : undefined,
+      signal
     });
 
-    if (!RETRYABLE.has(resp.status)) return resp;
+    // Retry only on classic transient statuses
+    if (![429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526].includes(resp.status)) {
+      return resp; // success or non-retryable error
+    }
 
-    // Respect Retry-After if present
+    // Backoff but stay within remaining budget; respect Retry-After if present
     const ra = Number(resp.headers.get("retry-after") ?? 0);
-    const backoff = ra > 0 ? ra * 1000 : (800 * 2 ** attempt) + Math.floor(Math.random() * 400);
-    await new Promise((r) => setTimeout(r, backoff));
+    const backoff = ra > 0 ? ra * 1000 : (400 * 2 ** attempt) + Math.floor(Math.random() * 200);
+    const newElapsed = Date.now() - start;
+    const newLeft = budgetMs - newElapsed;
+    if (newLeft <= 0) break;
+    await sleepWithinBudget(backoff, newLeft);
   }
 
-  // After max attempts, return a JSON error (503)
   return new Response(
     JSON.stringify({ error: "Upstream busy (rate limited). Please try again shortly." }),
     { status: 503, headers: { "Content-Type": "application/json" } }
@@ -65,19 +87,33 @@ async function callOpenAIWithBackoff(body: any, key: string) {
 export async function POST(req: Request) {
   const { input, cefr, exam, inclusive, locale = "IE" } = (await req.json()) as ReqBody;
 
-  // 1) Get raw text (or fetch URL)
+  // Overall budget: keep under ~24s (safe margin below Hobby Edge limit)
+  const BUDGET_MS = 24_000;
+  const started = Date.now();
+  const left = () => BUDGET_MS - (Date.now() - started);
+
+  // 1) Prepare text (or fetch URL quickly)
   let source = "pasted text";
   let raw = (input ?? "").trim();
   if (looksLikeUrl(raw)) {
     source = raw;
     try {
-      const r = await fetch(raw, { headers: { Accept: "text/html,*/*;q=0.8" } });
+      // Fast fetch with 4s timeout so we don't burn the budget
+      const perFetch = Math.min(4_000, Math.max(1_000, left()));
+      // @ts-ignore
+      const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout
+        ? AbortSignal.timeout(perFetch)
+        : undefined;
+
+      const r = await fetch(raw, { headers: { Accept: "text/html,*/*;q=0.8" }, signal });
       const html = await r.text();
-      raw = stripHtml(html).slice(0, 5000); // keep token load modest
+      raw = stripHtml(html).slice(0, 4000); // smaller slice lowers token usage & 429 likelihood
     } catch {
+      // fall back to the original input if fetch fails
       raw = input;
     }
   }
+
   if (!raw) {
     return new Response(JSON.stringify({ error: "Missing input" }), {
       status: 400, headers: { "Content-Type": "application/json" },
@@ -92,7 +128,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // 3) Prompt
+  // 3) Build prompt
   const prompt = `
 You are an ESL materials writer. Create a neutral, inclusive student text and exercises.
 
@@ -115,14 +151,14 @@ RETURN JSON ONLY in this exact shape:
 }
 `.trim();
 
-  // 4) Call model with retries
+  // 4) Call model within remaining budget
   const body = {
     model: "gpt-4o-mini",
     response_format: { type: "json_object" },
     messages: [{ role: "user", content: prompt }],
   };
 
-  const api = await callOpenAIWithBackoff(body, key);
+  const api = await callOpenAIWithinBudget(body, key, left());
 
   if (!api.ok) {
     const txt = await api.text().catch(() => "");
