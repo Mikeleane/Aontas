@@ -1,4 +1,9 @@
-﻿"use client";
+﻿'use client';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
+"use client";
 import React, { useEffect, useState } from "react";
 
 type TeacherPanel = {
@@ -79,8 +84,8 @@ export default function EmbedPage() {
 
       <label className="block font-medium mt-2">Source text or URL</label>
       <textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
+        value={sourceText}
+        onChange={(e) => setSourceText(e.target.value)}
         className="w-full min-h-[140px] border rounded-lg p-2"
         placeholder="Paste article text or a link…"
       />
@@ -265,3 +270,4 @@ export default function EmbedPage() {
     </main>
   );
 }
+
