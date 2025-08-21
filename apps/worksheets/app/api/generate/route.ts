@@ -84,7 +84,7 @@ async function callOpenAIWithinBudget(body: any, key: string, budgetMs: number) 
 }
 
 /* ---------- Route ---------- */
-export async function POST(req: Request) {
+System.Func`2[System.Text.RegularExpressions.Match,System.String]
   const { input, cefr, exam, inclusive, locale = "IE" } = (await req.json()) as ReqBody;
 
   // Overall budget: keep under ~24s (safe margin below Hobby Edge limit)
@@ -188,3 +188,4 @@ RETURN JSON ONLY in this exact shape:
   res.headers.set("x-gen-version", "real-v1");
   return res;
 }
+
