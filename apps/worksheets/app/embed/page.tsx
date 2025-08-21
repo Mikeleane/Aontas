@@ -36,7 +36,7 @@ type GenResponse = {
 };
 
 export default function EmbedPage() {
-  const [input, setInput] = useState("");
+  const [includeLD, setIncludeLD] = useState(true);
   const [cefr, setCefr] = useState<"A2"|"B1"|"B2"|"C1">("B1");
   const [exam, setExam] = useState("Cambridge B2");
   const [inclusive, setInclusive] = useState(true);
@@ -112,6 +112,57 @@ export default function EmbedPage() {
         type="button"
       >
         {busy ? "Working…" : "Generate preview"}
+<div className="flex items-center gap-3 my-3">
+  <label className="flex items-center gap-2">
+    <input type="checkbox" checked={includeLD} onChange={(e)=>setIncludeLD(e.target.checked)} />
+    Include LD panel in export
+  </label>
+
+  <button
+    onClick={async () => {
+      if (!data) { setNote("Generate first."); return; }
+      setNote("Building DOCX…");
+      const res = await fetch("/api/export/docx", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ data, includeLD })
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "worksheet.docx"; a.click();
+      URL.revokeObjectURL(url);
+      setNote("DOCX downloaded.");
+    }}
+    className="rounded-lg px-3 py-2 border"
+    type="button"
+  >
+    Export DOCX
+  </button>
+
+  <button
+    onClick={async () => {
+      if (!data) { setNote("Generate first."); return; }
+      setNote("Building PDF…");
+      const res = await fetch("/api/export/pdf", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ data, includeLD })
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "worksheet.pdf"; a.click();
+      URL.revokeObjectURL(url);
+      setNote("PDF downloaded.");
+    }}
+    className="rounded-lg px-3 py-2 border"
+    type="button"
+  >
+    Export PDF
+  </button>
+</div>
+
       </button>
       <div className="text-sm mt-2">{note}</div>
 
@@ -133,6 +184,21 @@ export default function EmbedPage() {
           {/* Teacher Panel */}
           <aside className="md:col-span-2 border rounded-xl p-4 bg-gray-50">
             <h3 className="text-lg font-semibold">Teacher Panel</h3>
+
+<div className="mt-3">
+  <h4 className="font-medium">Pre-teach vocabulary</h4>
+  <ul className="list-disc pl-5 text-sm">
+    {(data.teacher_panel?.preteach_vocab ?? []).map((w,i)=> <li key={i}>{w}</li>)}
+  </ul>
+</div>
+
+<div className="mt-3">
+  <h4 className="font-medium">Answer key</h4>
+  <ul className="list-decimal pl-5 text-sm">
+    {(data.answer_key ?? []).map((a,i)=> <li key={i}>{a}</li>)}
+  </ul>
+</div>
+
 
             <div className="mt-3">
               <h4 className="font-medium">CEFR rationale</h4>

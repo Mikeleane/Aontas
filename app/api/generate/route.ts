@@ -15,6 +15,7 @@ type TeacherPanel = {
   inclusive_notes: string[];
   differentiation: string[];
   source_notes?: string;
+  preteach_vocab: string[];    // NEW
 };
 
 type SourceVerification = {
@@ -36,7 +37,8 @@ type SourceVerification = {
 
 type GenResponse = {
   student_text: string;
-  exercises: string[];
+  exercises: string[];         // e.g., "Reading: T/F/NG (5)", etc.
+  answer_key: string[];        // NEW — one entry per exercise item or a brief key
   source: string;
   credit: string;
   teacher_panel: TeacherPanel;
@@ -79,6 +81,20 @@ function trimToWords(s: string, n = 220) {
   const out = words.join(" ");
   return /[.!?]$/.test(out) ? out : out + ".";
 }
+
+function preteachVocab(raw: string, n = 10): string[] {
+  const stop = new Set(["the","a","an","and","or","but","to","of","in","on","at","for","with","by","from","as","that","this","it","is","are","was","were","be","been","being","which","who","whom","whose","than","then","so","such","into","about","over","under","between","after","before","because","while","if","though","although","however","there","their","they","them","we","our","you","your","i","me","my"]);
+  const words = (raw.toLowerCase().match(/\b[\p{L}\p{N}'’-]+\b/gu) || [])
+    .map(w => w.replace(/^[’'--]+|[’'--]+$/g,""))
+    .filter(w => w.length >= 6 && !stop.has(w));
+  const freq = new Map<string, number>();
+  for (const w of words) freq.set(w, (freq.get(w) ?? 0) + 1);
+  return [...freq.entries()]
+    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]))
+    .slice(0, n)
+    .map(([w]) => w);
+}
+
 
 /* ---------- Sensitive / inclusive heuristics ---------- */
 function flagSensitive(raw: string): string[] {
@@ -206,6 +222,7 @@ function fallbackResult(raw: string, cefr: string, exam: string, source: string)
   return {
     student_text: `Neutralised summary (${cefr} • ${exam}). ${trimToWords(raw, 220)}`,
     exercises: ["Reading: True/False/Not Given (5)", "Short Answer (3)"],
+    answer_key: ["(Create T/F/NG answers using the text.)", "(Short answers will vary; accept paraphrases)."],  // NEW
     source,
     credit: "Prepared by [Your Name] • fallback",
     teacher_panel: {
@@ -213,10 +230,12 @@ function fallbackResult(raw: string, cefr: string, exam: string, source: string)
       sensitive_flags: flagSensitive(raw),
       inclusive_notes: inclusiveNotes(raw),
       differentiation: differentiationByCEFR(cefr as any),
+      preteach_vocab: preteachVocab(raw, 10),                                                // NEW
       source_notes: "AI fallback used; source not verified by the model."
     }
   };
 }
+
 
 /* ---------- Route ---------- */
 export async function POST(req: Request) {
@@ -267,7 +286,7 @@ export async function POST(req: Request) {
 
   // 4) Prompt – ask for Teacher Panel (strict JSON)
   const metrics = `avg_sentence_len=${avgSentenceLen(raw)}, pct_long_words=${pctLongWords(raw)}%, total_words=${wordCount(raw)}`;
-  const prompt = `
+ const prompt = `
 You are an ESL materials writer. Produce safe, inclusive materials AND a teacher panel.
 
 INPUT TEXT:
@@ -282,14 +301,16 @@ RETURN STRICT JSON (no commentary):
 {
   "student_text": "string",
   "exercises": ["Reading: True/False/Not Given (5)", "Short Answer (3)"],
+  "answer_key": ["Answer 1...", "Answer 2..."],                   // answers for listed tasks
   "source": "${source}",
   "credit": "Prepared by [Your Name]",
   "teacher_panel": {
-    "cefr_rationale": "Use readability & vocabulary reasoning. Consider ${metrics}.",
-    "sensitive_flags": ["list potential sensitivities, if any"],
-    "inclusive_notes": ["practical edits for neutral/inclusive phrasing"],
+    "cefr_rationale": "readability & vocabulary reasoning",
+    "sensitive_flags": ["potential sensitivities"],
+    "inclusive_notes": ["practical edits for inclusive phrasing"],
     "differentiation": ["3 concise suggestions for this CEFR"],
-    "source_notes": "If source is a URL, suggest how to cite/link appropriately."
+    "preteach_vocab": ["10 key words/phrases to pre-teach"],       // NEW
+    "source_notes": "if source is a URL, how to cite/link"
   }
 }
 `.trim();
@@ -318,22 +339,172 @@ RETURN STRICT JSON (no commentary):
   let parsed: Partial<GenResponse> = {};
   try { parsed = JSON.parse(content); } catch {}
 
-  const result: GenResponse = {
-    student_text: parsed.student_text ?? fallbackResult(raw, cefr, exam, source).student_text,
-    exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : ["Reading: True/False/Not Given (5)", "Short Answer (3)"],
-    source,
-    credit: (parsed.credit ?? "Prepared by [Your Name]") + " • real-v1",
-    teacher_panel: parsed.teacher_panel ?? {
-      cefr_rationale: `Heuristic: ${metrics}.`,
-      sensitive_flags: flagSensitive(raw),
-      inclusive_notes: inclusiveNotes(raw),
-      differentiation: differentiationByCEFR(cefr),
-      source_notes: "Model did not supply notes; heuristics used."
-    },
-    source_verification
-  };
+ const result: GenResponse = {
+  student_text: parsed.student_text ?? fallbackResult(raw, cefr, exam, source).student_text,
+  exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : ["Reading: True/False/Not Given (5)", "Short Answer (3)"],
+  answer_key: Array.isArray((parsed as any).answer_key) ? (parsed as any).answer_key.slice(0, 6) : ["(Create T/F/NG answers using the text.)","(Short answers will vary.)"],
+  source,
+  credit: (parsed.credit ?? "Prepared by [Your Name]") + " • real-v1",
+  teacher_panel: parsed.teacher_panel ?? {
+    cefr_rationale: `Heuristic: ${metrics}.`,
+    sensitive_flags: flagSensitive(raw),
+    inclusive_notes: inclusiveNotes(raw),
+    differentiation: differentiationByCEFR(cefr),
+    preteach_vocab: preteachVocab(raw, 10),
+    source_notes: "Model did not supply notes; heuristics used."
+  },
+  source_verification
+};
+
 
   const res = new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   res.headers.set("x-gen-version", "real-v1");
   return res;
+}
+export const runtime = "nodejs";
+
+import { NextRequest } from "next/server";
+
+export async function POST(req: NextRequest) {
+  const { data, includeLD = true } = await req.json();
+
+  const { Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType, PageBreak } = await import("docx");
+
+  const H1 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_1 });
+  const H2 = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_2 });
+  const P  = (t: string) => new Paragraph({ children: [new TextRun(t)] });
+
+  const doc = new Document({
+    styles: { default: { document: { run: { size: 24, font: "Calibri" }, paragraph: { spacing: { line: 276 } } } } },
+    sections: [
+      {
+        children: [
+          H1("Student Text"),
+          P(data.student_text || ""),
+          new Paragraph({ children: [new PageBreak()] }),
+
+          H1("Exercises"),
+          ...((data.exercises || []) as string[]).map((ex: string, i: number) => P(`${i + 1}. ${ex}`)),
+          H2("Answer Key"),
+          ...((data.answer_key || []) as string[]).map((a: string, i: number) => P(`${i + 1}. ${a}`)),
+          new Paragraph({ children: [new PageBreak()] }),
+
+          H1("Teacher Panel"),
+          H2("CEFR rationale"), P(data.teacher_panel?.cefr_rationale || "—"),
+          H2("Sensitive content flags"),
+          P((data.teacher_panel?.sensitive_flags || []).join(", ") || "None detected."),
+          H2("Inclusive-language notes"),
+          ...((data.teacher_panel?.inclusive_notes || []) as string[]).map((n: string) => P("• " + n)),
+          H2("Differentiation"),
+          ...((data.teacher_panel?.differentiation || []) as string[]).map((n: string) => P("• " + n)),
+          ...(includeLD ? [H2("Learning Differences (LD) — included"), P("Ensure multi-modal input, scaffolded output, and extra processing time.")] : []),
+          H2("Pre-teach vocabulary"),
+          ...((data.teacher_panel?.preteach_vocab || []) as string[]).map((w: string) => P("• " + w)),
+          H2("Source verification"),
+          P(data.source_verification ? `${data.source_verification.verdict} • score ${data.source_verification.score}/100` : "—"),
+          P("Source: " + (data.source || "—")),
+          P(data.credit || "")
+        ],
+      },
+    ],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  return new Response(buffer, {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "Content-Disposition": `attachment; filename="worksheet.docx"`
+    }
+  });
+}
+export const runtime = "nodejs";
+
+import { NextRequest } from "next/server";
+
+export async function POST(req: NextRequest) {
+  const { data, includeLD = true } = await req.json();
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  const margin = 50, lineHeight = 14, maxWidth = 500;
+
+  const addPage = () => pdf.addPage([612, 792]); // US Letter; ok for A4 too
+  let page = addPage();
+  let y = 792 - margin;
+
+  function drawHeading(text: string, level = 1) {
+    const size = level === 1 ? 16 : 13;
+    y -= lineHeight * 1.5;
+    page.drawText(text, { x: margin, y, size, font: fontBold, color: rgb(0, 0, 0) });
+    y -= lineHeight * 0.5;
+  }
+
+  function drawText(text: string) {
+    const words = text.split(/\s+/);
+    let line = "";
+    const size = 11;
+
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      const width = font.widthOfTextAtSize(test, size);
+      if (width > maxWidth) {
+        y -= lineHeight;
+        if (y < margin) { page = addPage(); y = 792 - margin; }
+        page.drawText(line, { x: margin, y, size, font });
+        line = w;
+      } else {
+        line = test;
+      }
+    }
+    if (line) {
+      y -= lineHeight;
+      if (y < margin) { page = addPage(); y = 792 - margin; }
+      page.drawText(line, { x: margin, y, size, font });
+    }
+  }
+
+  function pageBreak() {
+    page = addPage();
+    y = 792 - margin;
+  }
+
+  // Student text
+  drawHeading("Student Text", 1);
+  drawText(data.student_text || "");
+  pageBreak();
+
+  // Exercises + Answer Key
+  drawHeading("Exercises", 1);
+  (data.exercises || []).forEach((ex: string, i: number) => drawText(`${i + 1}. ${ex}`));
+  drawHeading("Answer Key", 2);
+  (data.answer_key || []).forEach((a: string, i: number) => drawText(`${i + 1}. ${a}`));
+  pageBreak();
+
+  // Teacher Panel
+  drawHeading("Teacher Panel", 1);
+  drawHeading("CEFR rationale", 2); drawText(data.teacher_panel?.cefr_rationale || "—");
+  drawHeading("Sensitive content flags", 2); drawText((data.teacher_panel?.sensitive_flags || []).join(", ") || "None detected.");
+  drawHeading("Inclusive-language notes", 2); (data.teacher_panel?.inclusive_notes || []).forEach((n: string)=> drawText("• " + n));
+  drawHeading("Differentiation", 2); (data.teacher_panel?.differentiation || []).forEach((n: string)=> drawText("• " + n));
+  if (includeLD) { drawHeading("Learning Differences (LD)", 2); drawText("Ensure multi-modal input, scaffolded output, and extra processing time."); }
+  drawHeading("Pre-teach vocabulary", 2); (data.teacher_panel?.preteach_vocab || []).forEach((w: string)=> drawText("• " + w));
+  drawHeading("Source verification", 2);
+  if (data.source_verification) {
+    drawText(`${data.source_verification.verdict} • score ${data.source_verification.score}/100`);
+  } else {
+    drawText("—");
+  }
+  drawText("Source: " + (data.source || "—"));
+  drawText(data.credit || "");
+
+  const bytes = await pdf.save();
+  return new Response(Buffer.from(bytes), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="worksheet.pdf"'
+    }
+  });
 }
