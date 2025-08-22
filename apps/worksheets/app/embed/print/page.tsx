@@ -1,14 +1,7 @@
-﻿/** SAFE exercise renderer (clean) */
-type Exercise =
-  | string
-  | number
-  | { task?: unknown; questions?: unknown[]; [k: string]: unknown }
-  | unknown[];
-
-function safeRenderExercise(ex: unknown, idx: number): JSX.Element | null {
+﻿function safeRenderExercise(ex: unknown, idx: number): JSX.Element | null {
   if (ex === null || ex === undefined) return null;
 
-  // primitives → plain <li>
+  // primitives → <li>
   if (typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean") {
     return <li key={idx}>{String(ex)}</li>;
   }
@@ -40,6 +33,14 @@ function safeRenderExercise(ex: unknown, idx: number): JSX.Element | null {
   // fallback
   return <li key={idx}>{String(ex)}</li>;
 }
+/** SAFE exercise renderer (clean) */
+type Exercise =
+  | string
+  | number
+  | { task?: unknown; questions?: unknown[]; [k: string]: unknown }
+  | unknown[];
+
+
 "use client";
 import React, { useEffect, useState } from 'react';
 
@@ -398,6 +399,7 @@ export default function PrintPage() {
     </div>
   );
 }
+
 
 
 
