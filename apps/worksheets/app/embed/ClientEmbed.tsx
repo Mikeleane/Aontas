@@ -18,6 +18,19 @@ export default function ClientEmbed() {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
 
+// below your useState hooks, inside the ClientEmbed component
+const handleExport = React.useCallback(() => {
+  if (!result) return; // only export after a worksheet exists
+  try {
+    sessionStorage.setItem(
+      "aontasExport",
+      JSON.stringify({ result, includeLD }) // includeLD is your LD toggle
+    );
+  } catch {}
+  window.open("/embed/print", "_blank"); // or: location.href = "/embed/print"
+}, [result, includeLD]);
+
+
   async function onGenerate() {
     setLoading(true);
     setError(null);
@@ -75,6 +88,24 @@ export default function ClientEmbed() {
           Inclusive profile
         </label>
       </div>
+<div className="flex gap-2 mt-3">
+  <button
+    type="button"
+    onClick={onGenerate}  // your existing generate handler
+    className="px-3 py-2 rounded border"
+  >
+    Generate preview
+  </button>
+
+  <button
+    type="button"
+    onClick={handleExport}
+    disabled={!result}
+    className="px-3 py-2 rounded bg-black text-white disabled:opacity-40"
+  >
+    Export (PDF/Print)
+  </button>
+</div>
 
       <button
         onClick={onGenerate}
