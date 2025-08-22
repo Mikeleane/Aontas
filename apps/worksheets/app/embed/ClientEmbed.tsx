@@ -33,6 +33,7 @@
   // fallback
   return <li key={idx}>{String(ex)}</li>;
 }
+
 /** SAFE exercise renderer (clean) */
 type Exercise =
   | string
@@ -51,16 +52,6 @@ function normalizeExercises(list) {
   if (list && typeof list === "object") return Object.values(list);
   return [];
 }
-
-  }
-
-  // Array → list
-  if (Array.isArray(ex)) {
-    return (
-      <li key={key}>
-        <ul>{ex.map((e, i) => safeRenderExercise(e, i))}</ul>
-      </li>
-    );
   }
 
   // Object → show core fields, then optional details
@@ -108,9 +99,6 @@ function normalizeExercises(list) {
       </li>
     );
   }
-
-  // Fallback
-  return <li key={key}return <li key={idx}>{String(ex)}</li>;
 }
 /* ===== SAFE EXERCISE RENDERERS (injected) ===== */
 type ExerciseShape =
@@ -368,6 +356,7 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
 
 
