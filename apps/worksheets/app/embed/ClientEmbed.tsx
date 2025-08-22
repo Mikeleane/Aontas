@@ -1,106 +1,216 @@
 ﻿"use client";
+
 import React, { useState } from "react";
 
-type Preview = {
-  student_text?: string;
-  exercises?: any[];
-  source?: string;
-  credit?: string;
-  teacher_panel?: any;
+type GenResponse = {
+  student_text: string;
+  exercises: string[];
+  source: string;
+  credit: string;
+  teacher_panel?: {
+    cefr_rationale?: string;
+    sensitive_content?: string[];
+    inclusive_language?: string[];
+    differentiation?: {
+      extra_support?: string;
+      fast_finishers?: string;
+      ld_support?: string;
+    };
+    verified_sources?: string[];
+  };
 };
 
+const CEFR_OPTS = ["A2", "B1", "B2", "C1", "C2"] as const;
+
+const EXAM_OPTS = [
+  "Cambridge A2",
+  "Cambridge B1",
+  "Cambridge B2",
+  "Cambridge C1",
+  "IELTS Academic",
+  "TOEFL iBT",
+] as const;
+
+const LOCALE_OPTS = [
+  { value: "IE", label: "Irish English" },
+  { value: "UK", label: "British English" },
+  { value: "US", label: "American English" },
+  { value: "ES", label: "Spanish (Spain)" },
+] as const;
+
+const SCHOOL_OPTS = [
+  { value: "PUBLIC", label: "Public / State" },
+  { value: "DEIS", label: "DEIS (Ireland)" },
+  { value: "PRIVATE", label: "Private" },
+  { value: "ADULT_ED", label: "Adult Ed." },
+] as const;
+
 export default function ClientEmbed() {
-  const [input, setInput] = useState("");
-  const [cefr, setCefr] = useState("B2");
-  const [exam, setExam] = useState("Cambridge B2");
+  const [sourceText, setSourceText] = useState("");
+  const [cefr, setCefr] = useState<typeof CEFR_OPTS[number]>("B2");
+  const [exam, setExam] = useState<string>("Cambridge B2");
+  const [locale, setLocale] = useState("IE");
+  const [schoolType, setSchoolType] = useState("PUBLIC");
   const [inclusive, setInclusive] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [out, setOut] = useState<GenResponse | null>(null);
 
   async function onGenerate() {
-    setLoading(true);
     setError(null);
-    setPreview(null);
+    setOut(null);
+    setLoading(true);
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, cefr, exam, inclusive, locale: "IE" }),
+        body: JSON.stringify({ input: sourceText, cefr, exam, inclusive, locale, schoolType }),
       });
-      const text = await res.text();
-      if (!res.ok) {
-        throw new Error(`Server ${res.status}: ${text}`);
-      }
-      const data = JSON.parse(text);
-      setPreview(data);
-    } catch (e:any) {
-      setError(e?.message ?? "Unexpected error");
+      const txt = await res.text();
+      if (!res.ok) throw new Error(`Server ${res.status}: ${txt}`);
+      const data = JSON.parse(txt) as GenResponse;
+      setOut(data);
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
     } finally {
       setLoading(false);
-      // auto-resize when embedded in iframes
-      try {
-        window.parent?.postMessage({ type: "resize", height: document.body.scrollHeight }, "*");
-      } catch {}
     }
   }
 
-  return (
-    <div className="p-4 max-w-3xl mx-auto font-sans">
-      <h1 className="text-2xl font-semibold mb-4">LevelUp — Worksheet Generator</h1>
+  function onReset() {
+    setOut(null);
+    setError(null);
+  }
 
-      <label className="block text-sm mb-1">Source text or URL</label>
+  function onExport() {
+    if (!out) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const styles = `
+      <style>
+        body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5;padding:24px}
+        h1,h2{margin:0 0 8px}
+        .page-break{page-break-after:always;border-top:1px dashed #ddd;margin:24px 0}
+        ul{margin:0;padding-left:20px}
+        ol{padding-left:20px}
+        code{background:#f6f6f6;padding:2px 4px;border-radius:4px}
+      </style>`;
+    const tp = out.teacher_panel;
+
+    win.document.write(`<html><head><title>Worksheet Export</title>${styles}</head><body>`);
+    win.document.write(`<h1>Student Text</h1><p>${(out.student_text ?? "").replace(/\n/g, "<br/>")}</p>`);
+    win.document.write(`<div class="page-break"></div>`);
+    win.document.write(`<h1>Exercises</h1><ol>${(out.exercises ?? []).map((x) => `<li>${x}</li>`).join("")}</ol>`);
+    win.document.write(`<div class="page-break"></div>`);
+    win.document.write(`<h1>Teacher Panel</h1>`);
+    if (tp?.cefr_rationale) win.document.write(`<h2>CEFR rationale</h2><p>${tp.cefr_rationale}</p>`);
+    if (tp?.sensitive_content?.length) win.document.write(`<h2>Flagged sensitive content</h2><ul>${tp.sensitive_content.map((s) => `<li>${s}</li>`).join("")}</ul>`);
+    if (tp?.inclusive_language?.length) win.document.write(`<h2>Inclusive-language notes</h2><ul>${tp.inclusive_language.map((s) => `<li>${s}</li>`).join("")}</ul>`);
+    if (tp?.differentiation) {
+      win.document.write(`<h2>Suggested differentiation</h2><ul>`);
+      if (tp.differentiation.extra_support) win.document.write(`<li><b>Extra support:</b> ${tp.differentiation.extra_support}</li>`);
+      if (tp.differentiation.fast_finishers) win.document.write(`<li><b>Fast finishers:</b> ${tp.differentiation.fast_finishers}</li>`);
+      if (tp.differentiation.ld_support) win.document.write(`<li><b>LD panel:</b> ${tp.differentiation.ld_support}</li>`);
+      win.document.write(`</ul>`);
+    }
+    if (out.source) win.document.write(`<p><b>Source:</b> ${out.source}</p>`);
+    if (out.credit) win.document.write(`<p><b>Credit:</b> ${out.credit}</p>`);
+    win.document.write(`</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  return (
+    <div className="p-4 space-y-3 max-w-3xl">
       <textarea
-        className="w-full border rounded p-2 h-40 mb-3"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Paste text or a URL…"
+        value={sourceText}
+        onChange={(e) => setSourceText(e.target.value)}
+        placeholder="Paste source text or a URL…"
+        className="w-full h-36 p-2 border rounded"
       />
 
-      <div className="flex gap-3 items-center mb-3">
-        <div>
-          <label className="block text-sm mb-1">CEFR</label>
-          <select className="border rounded p-2" value={cefr} onChange={(e)=>setCefr(e.target.value)}>
-            {["A2","B1","B2","C1","C2"].map(l=> <option key={l} value={l}>{l}</option>)}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <label className="flex flex-col text-sm">CEFR
+          <select className="border rounded p-1" value={cefr} onChange={(e) => setCefr(e.target.value as any)}>
+            {CEFR_OPTS.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
-        </div>
-        <div>
-          <label className="block text-sm mb-1">Exam</label>
-          <select className="border rounded p-2" value={exam} onChange={(e)=>setExam(e.target.value)}>
-            {["Cambridge B1","Cambridge B2","Cambridge C1","IELTS","TOEFL"].map(x=> <option key={x} value={x}>{x}</option>)}
+        </label>
+
+        <label className="flex flex-col text-sm">Exam
+          <select className="border rounded p-1" value={exam} onChange={(e) => setExam(e.target.value)}>
+            {EXAM_OPTS.map((v) => (<option key={v} value={v}>{v}</option>))}
           </select>
-        </div>
-        <label className="flex items-center gap-2 mt-6">
-          <input type="checkbox" checked={inclusive} onChange={(e)=>setInclusive(e.target.checked)} />
+        </label>
+
+        <label className="flex flex-col text-sm">Locale
+          <select className="border rounded p-1" value={locale} onChange={(e) => setLocale(e.target.value)}>
+            {LOCALE_OPTS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+          </select>
+        </label>
+
+        <label className="flex flex-col text-sm">School type
+          <select className="border rounded p-1" value={schoolType} onChange={(e) => setSchoolType(e.target.value)}>
+            {SCHOOL_OPTS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2 text-sm col-span-2">
+          <input type="checkbox" checked={inclusive} onChange={(e) => setInclusive(e.target.checked)} />
           Inclusive profile
         </label>
       </div>
 
-      <button
-        onClick={onGenerate}
-        disabled={loading || !input.trim()}
-        className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
-      >
-        {loading ? "Generating…" : "Generate preview"}
-      </button>
+      <div className="flex gap-2">
+        <button onClick={onGenerate} disabled={loading} className="px-3 py-2 rounded bg-black text-white">
+          {loading ? "Generating…" : "Generate preview"}
+        </button>
+        <button onClick={onReset} className="px-3 py-2 rounded border">Reset preview</button>
+        <button onClick={onExport} disabled={!out} className="px-3 py-2 rounded border">Export (PDF/Print)</button>
+      </div>
 
-      {error && (
-        <p className="mt-4 text-red-600 text-sm whitespace-pre-wrap">Error: {error}</p>
-      )}
+      {error && <pre className="text-red-600 whitespace-pre-wrap">{error}</pre>}
 
-      {preview && (
-        <div className="mt-6 border rounded p-4 bg-white">
-          <h2 className="font-semibold mb-2">Student text (preview)</h2>
-          <p className="whitespace-pre-wrap text-sm">{preview.student_text ?? "(empty)"}</p>
+      {out && (
+        <div className="space-y-4">
+          <h2 className="font-semibold text-lg">Student text (preview)</h2>
+          <p className="whitespace-pre-wrap">{out.student_text}</p>
 
-          <h3 className="font-semibold mt-4 mb-2">Exercises</h3>
-          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
-{JSON.stringify(preview.exercises ?? [], null, 2)}
-          </pre>
+          <h3 className="font-semibold">Exercises</h3>
+          <ol className="list-decimal pl-5 space-y-1">
+            {(out.exercises ?? []).map((e, i) => (<li key={i}>{e}</li>))}
+          </ol>
 
-          <p className="text-xs text-gray-500 mt-3">
-            Source: {preview.source ?? "pasted text"} • {preview.credit ?? "Prepared by [Your Name]"}
-          </p>
+          {out.teacher_panel && (
+            <details className="border rounded p-3">
+              <summary className="cursor-pointer font-medium">Teacher Panel</summary>
+              <div className="mt-2 space-y-2">
+                {out.teacher_panel.cefr_rationale && (
+                  <section><b>CEFR rationale:</b> <p>{out.teacher_panel.cefr_rationale}</p></section>
+                )}
+                {out.teacher_panel.sensitive_content?.length ? (
+                  <section><b>Sensitive content:</b>
+                    <ul className="list-disc pl-5">{out.teacher_panel.sensitive_content.map((s: string, i: number) => (<li key={i}>{s}</li>))}</ul>
+                  </section>
+                ) : null}
+                {out.teacher_panel.inclusive_language?.length ? (
+                  <section><b>Inclusive-language notes:</b>
+                    <ul className="list-disc pl-5">{out.teacher_panel.inclusive_language.map((s: string, i: number) => (<li key={i}>{s}</li>))}</ul>
+                  </section>
+                ) : null}
+                {out.teacher_panel.differentiation && (
+                  <section><b>Differentiation:</b>
+                    <ul className="list-disc pl-5">
+                      {out.teacher_panel.differentiation.extra_support && <li><b>Extra support:</b> {out.teacher_panel.differentiation.extra_support}</li>}
+                      {out.teacher_panel.differentiation.fast_finishers && <li><b>Fast finishers:</b> {out.teacher_panel.differentiation.fast_finishers}</li>}
+                      {out.teacher_panel.differentiation.ld_support && <li><b>LD panel:</b> {out.teacher_panel.differentiation.ld_support}</li>}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </div>

@@ -1,102 +1,112 @@
-﻿export const runtime = "edge";
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
+﻿import type { NextRequest } from "next/server";
+
+export const runtime = "edge";
 
 type GenResponse = {
   student_text: string;
-  exercises: any[];
+  exercises: string[];
   source: string;
   credit: string;
   teacher_panel?: any;
 };
 
-export async function POST(req: Request) {
-  // Safe parse of incoming JSON
-  let body: any = {};
-  try { body = await req.json(); } catch {}
-  const {
-    input = "",
-    cefr = "B2",
-    exam = "Cambridge B2",
-    inclusive = true,
-    locale = "IE",
-  } = body || {};
-
-  if (!input?.trim()) {
-    return new Response(JSON.stringify({ error: "Missing input" }), { status: 400 });
-  }
-
-  const key = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-  if (!key) {
-    return new Response(
-      JSON.stringify({ error: "SERVER_MISCONFIG", detail: "Missing OPENAI_API_KEY" }),
-      { status: 500 }
-    );
-  }
-
-  const system =
-    `You are an English language worksheet generator. Return ONLY JSON with keys:
-- student_text (180–260 words, neutral tone)
-- exercises (2–6 items, e.g., "Reading: True/False/Not Given (5)", "Short Answer (3)")
-- source ("pasted text" or URL)
-- credit ("Prepared by [Your Name]")
-- teacher_panel (object with: cefr_rationale, sensitive_flags, inclusive_language_notes, differentiation, sources)
-No markdown, no backticks, no commentary.`;
-
-  const userPayload = {
-    input,
-    cefr,
-    exam,
-    inclusive,
-    locale,
-  };
-
-  const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(userPayload) },
-      ],
-    }),
-  });
-
-  if (!upstream.ok) {
-    const detail = await upstream.text().catch(() => "");
-    return new Response(
-      JSON.stringify({ error: `Upstream ${upstream.status}`, detail }),
-      { status: 502 }
-    );
-  }
-
-  let content = "{}";
+export async function POST(req: NextRequest) {
   try {
-    const data = await upstream.json();
-    content = data?.choices?.[0]?.message?.content ?? "{}";
-  } catch {
-    content = "{}";
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) {
+      return new Response(JSON.stringify({ error: "SERVER_MISCONFIG", detail: "Missing OPENAI_API_KEY" }), { status: 400 });
+    }
+
+    const body = await req.json();
+    const input      = (body?.input ?? "").toString().slice(0, 8000).trim();
+    const cefr       = (body?.cefr ?? "B2").toString();
+    const exam       = (body?.exam ?? "Cambridge B2").toString();
+    const inclusive  = !!body?.inclusive;
+    const locale     = (body?.locale ?? "IE").toString();
+    const schoolType = (body?.schoolType ?? "PUBLIC").toString();
+
+    if (!input) {
+      return new Response(JSON.stringify({ error: "VALIDATION", detail: "input is required" }), { status: 400 });
+    }
+
+    const dialectRule =
+      locale === "IE" ? "Use Irish English conventions (spelling/usage)." :
+      locale === "UK" ? "Use British English conventions (spelling/usage)." :
+      locale === "US" ? "Use American English conventions (spelling/usage)." :
+      locale === "ES" ? "Use Spanish (Spain) for bilingual labels if needed." :
+      "";
+
+    const schoolRule =
+      schoolType === "DEIS"     ? "Assume DEIS context in Ireland: add scaffolds and sensitive-topic care." :
+      schoolType === "PUBLIC"   ? "Assume public/state school context." :
+      schoolType === "PRIVATE"  ? "Assume private school context." :
+      schoolType === "ADULT_ED" ? "Assume adult education context." : "";
+
+    const inclusiveRule = inclusive
+      ? "Apply inclusive-language guidelines; flag bias/stereotypes and propose neutral alternatives."
+      : "";
+
+    const prompt = `
+You are a careful ELT materials writer.
+
+INPUT:
+<<<${input}>>>
+
+Write a JSON object with properties:
+- "student_text": ~180–260 words in a neutral tone for ${cefr} level (${exam}) following ${dialectRule}
+- "exercises": an array with 2–3 tasks (True/False/Not Given + Short Answer recommended)
+- "source": origin label (URL or "pasted text")
+- "credit": "Prepared by [Your Name]"
+- "teacher_panel": object with:
+  - "cefr_rationale"
+  - "sensitive_content" (array)
+  - "inclusive_language" (array)
+  - "differentiation": { "extra_support", "fast_finishers", "ld_support" }
+  - "verified_sources" (array)
+
+Context rules:
+- ${schoolRule}
+- ${inclusiveRule}
+
+JSON only. No markdown or backticks.
+`.trim();
+
+    const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 800
+      })
+    });
+
+    const raw = await completion.text();
+    if (!completion.ok) {
+      return new Response(raw, { status: completion.status });
+    }
+
+    let parsed: any = {};
+    try {
+      const outer = JSON.parse(raw);
+      const inner = outer?.choices?.[0]?.message?.content ?? "{}";
+      parsed = JSON.parse(inner);
+    } catch {
+      parsed = {};
+    }
+
+    const result: GenResponse = {
+      student_text: parsed.student_text ?? "Sorry—could not generate.",
+      exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : [],
+      source: parsed.source ?? "pasted text",
+      credit: parsed.credit ?? "Prepared by [Your Name]",
+      teacher_panel: parsed.teacher_panel ?? undefined,
+    };
+
+    return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: "SERVER_ERROR", detail: String(err?.message ?? err) }), { status: 500 });
   }
-
-  let parsed: Partial<GenResponse> = {};
-  try { parsed = JSON.parse(content); } catch {}
-
-  const result: GenResponse = {
-    student_text: parsed.student_text ?? "Sorry—could not generate.",
-    exercises: Array.isArray(parsed.exercises) ? parsed.exercises.slice(0, 6) : [],
-    source: parsed.source ?? "pasted text",
-    credit: parsed.credit ?? "Prepared by [Your Name]",
-    teacher_panel: parsed.teacher_panel ?? undefined,
-  };
-
-  return new Response(JSON.stringify(result), {
-    headers: { "Content-Type": "application/json" },
-  });
 }
