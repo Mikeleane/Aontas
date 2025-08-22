@@ -1,12 +1,35 @@
-﻿function safeRenderExercise(ex: unknown, idx: number): JSX.Element | null {
-  if (ex === null || ex === undefined) return null;
+﻿"use client";
 
-  // primitives → <li>
-  if (typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean") {
+import React, { useEffect, useState } from "react";
+
+type TeacherPanel = {
+  cefr_rationale?: string;
+  sensitive_flags?: string[];
+  inclusive_notes?: string[];
+  differentiation?: string[];
+  ld_panel?: string | null;
+  preteach_vocab?: string[];
+  answers?: Record<string, unknown>;
+  sources_verified?: boolean;
+  sources?: Array<{ title?: string; url?: string }>;
+};
+
+type Preview = {
+  student_text?: string;
+  exercises?: any[];
+  teacher_panel?: TeacherPanel;
+};
+
+function safeRenderExercise(ex: any, idx: number): JSX.Element | null {
+  if (ex == null) return null;
+
+  const isPrimitive =
+    typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean";
+
+  if (isPrimitive) {
     return <li key={idx}>{String(ex)}</li>;
   }
 
-  // array → nested list
   if (Array.isArray(ex)) {
     return (
       <li key={idx}>
@@ -14,42 +37,23 @@
       </li>
     );
   }
-    const obj = ex as Record<string, unknown>;
-    const task = (obj.task as string | undefined) ?? undefined;
-    const questions = Array.isArray(obj.questions) ? (obj.questions as unknown[]) : [];
+
+  if (typeof ex === "object") {
+    const {
+      type,
+      task,
+      prompt,
+      text,
+      question,
+      questions,
+      options,
+      answer,
+      ...rest
+    } = ex as Record<string, unknown>;
+
     return (
       <li key={idx}>
-        {task ? <strong>{task}</strong> : <em>Exercise</em>}
-        {questions.length > 0 && (
-          <ul>{questions.map((q, i) => safeRenderExercise(q, i))}</ul>
-        )}
-      </li>
-    );
-  }
-}
-
-/** SAFE exercise renderer (clean) */
-type Exercise =
-  | string
-  | number
-  | { task?: unknown; questions?: unknown[]; [k: string]: unknown }
-  | unknown[];
-
-
-"use client";
-import React, { useEffect, useState } from 'react';
-
-
-/* === NORMALIZE_EXERCISES_HELPERS (injected) === */
-function normalizeExercises(list) {
-  if (Array.isArray(list)) return list;
-  if (list && typeof list === "object") return Object.values(list);
-  return [];
-}
-    const { type, task, prompt, text, question, questions, options, answer, ...rest } = ex;
-    return (
-      <li key={key}>
-        <div className="font-medium">{task ?? type ?? "Exercise"}</div>
+        <div className="font-medium">{String(task ?? type ?? "Exercise")}</div>
 
         {prompt && <div className="mb-1">{String(prompt)}</div>}
         {text && <div className="mb-1">{String(text)}</div>}
@@ -57,7 +61,7 @@ function normalizeExercises(list) {
 
         {Array.isArray(questions) && questions.length > 0 && (
           <ol className="list-decimal ml-5">
-            {questions.map((q, i) => (
+            {questions.map((q: any, i: number) => (
               <li key={i}>{safeRenderExercise(q, i)}</li>
             ))}
           </ol>
@@ -65,7 +69,7 @@ function normalizeExercises(list) {
 
         {Array.isArray(options) && options.length > 0 && (
           <ul className="list-disc ml-5">
-            {options.map((o, i) => <li key={i}>{String(o)}</li>)}
+            {options.map((o: any, i: number) => <li key={i}>{String(o)}</li>)}
           </ul>
         )}
 
@@ -73,9 +77,9 @@ function normalizeExercises(list) {
           <details className="mt-1">
             <summary>Answer</summary>
             <pre className="whitespace-pre-wrap text-sm">
-{(typeof answer === "string" || typeof answer === "number")
-  ? String(answer)
-  : JSON.stringify(answer, null, 2)}
+              {typeof answer === "string" || typeof answer === "number"
+                ? String(answer)
+                : JSON.stringify(answer, null, 2)}
             </pre>
           </details>
         )}
@@ -83,313 +87,111 @@ function normalizeExercises(list) {
         {Object.keys(rest ?? {}).length > 0 && (
           <details className="mt-1">
             <summary>More</summary>
-            <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(rest, null, 2)}</pre>
+            <pre className="whitespace-pre-wrap text-xs">
+              {JSON.stringify(rest, null, 2)}
+            </pre>
           </details>
         )}
       </li>
     );
   }
-}
-/* ===== SAFE EXERCISE RENDERERS (injected) ===== */
-type ExerciseShape =
-  | string
-  | number
 
-  }
-  if (Array.isArray(ex)) {
-    return (
-      <li key={idx}>
-        <ul className="list-disc pl-5">
-          {ex.map((item, i) => <li key={i}>{String(item)}</li>)}
-        </ul>
-      </li>
-    );
-  }
-  if (ex && typeof ex === "object") {
-    const obj = ex as Record<string, unknown>;
-    const task = obj.task as string | undefined;
-    const questions = (obj.questions as unknown[]) || [];
-    return (
-      <li key={idx} className="mb-3">
-        {task && <div className="font-semibold">{task}</div>}
-        {Array.isArray(questions) && questions.length > 0 && (
-          <ol className="list-decimal pl-6 space-y-1">
-            {questions.map((q, i) => <li key={i}>{String(q)}</li>)}
-          </ol>
-        )}
-        {!task && (!Array.isArray(questions) || questions.length === 0) && (
-          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
-            {JSON.stringify(ex, null, 2)}
-          </pre>
-        )}
-      </li>
-    );
-  }
   return <li key={idx}>{String(ex)}</li>;
 }
 
-function Exercises({ items }: { items: any }) {
-  return <>{(items ?? []).map(safeRenderExercise)}</>;
-}
-/* ===== end injected helpers ===== */
-/** Keep types tolerant — we render defensively */
-type TeacherPanel = {
-  cefr_rationale?: string;
-  sensitive_flags?: string[];
-  inclusive_notes?: string[];
-  differentiation?: string[];
-  sources?: string[];
-  preteach_vocab?: string[];
-  answers?: Record<string, unknown> | string;
-};
-
-type GenResponse = {
-  student_text: string;
-  exercises: any[];
-  source?: string;
-  credit?: string;
-  teacher?: TeacherPanel;
-};
-
-type ExportBlob = {
-  result: GenResponse;
-  includeLD?: boolean;
-  cefr?: string;
-  exam?: string;
-  locale?: string;
-};
-
 export default function PrintPage() {
-  const [payload, setPayload] = useState<ExportBlob | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
 
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem("aontasExport");
-      if (raw) setPayload(JSON.parse(raw));
+      const raw = localStorage.getItem("aontas_preview");
+      if (raw) setPreview(JSON.parse(raw));
     } catch {
       // ignore
     }
   }, []);
 
-  if (!payload?.result) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="no-print mb-6">
-          <a
-            href="/embed"
-            className="inline-block rounded border px-3 py-2"
-          >
-            ← Back to generator
-          </a>
-        </div>
-        <p>Nothing to print. Generate a worksheet and click Export again.</p>
-      </div>
-    );
-  }
-
-  const { result, includeLD, cefr, exam, locale } = payload;
-  const teacher = result.teacher ?? {};
-  const answersText =
-    typeof teacher.answers === "string"
-      ? teacher.answers
-      : teacher.answers
-      ? JSON.stringify(teacher.answers, null, 2)
-      : "";
-
   return (
-    <div className="p-6 max-w-4xl mx-auto print:p-0">
-      {/* On-screen toolbar (hidden when printing) */}
-      <div className="no-print flex items-center gap-2 mb-6">
-        <button
-          onClick={() => window.print()}
-          className="rounded bg-black text-white px-3 py-2"
-        >
-          Print / Save as PDF
-        </button>
-        <a
-          href="/embed"
-          className="rounded border px-3 py-2"
-        >
-          Back to generator
-        </a>
-      </div>
+    <div className="max-w-3xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-4">Worksheet (Print)</h1>
 
-      {/* ---- TEACHER PACK ---- */}
-      <header>
-        <h1 className="text-2xl font-bold">Teacher Pack</h1>
-        <p className="text-sm text-gray-600">
-          {exam || "Exam"} • {cefr || "CEFR"} • {locale || "Locale"}
-        </p>
-      </header>
+      {preview ? (
+        <>
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold mb-2">Student worksheet</h2>
+            {preview.student_text && (
+              <div className="prose max-w-none whitespace-pre-wrap mb-4">
+                {preview.student_text}
+              </div>
+            )}
+            <h3 className="font-semibold mb-1">Exercises</h3>
+            <ul className="list-disc ml-5">
+              {(preview.exercises ?? []).map((ex, i) => safeRenderExercise(ex, i))}
+            </ul>
+          </section>
 
-      <section className="mt-4">
-        <h2 className="text-lg font-semibold">CEFR rationale</h2>
-        <p className="whitespace-pre-wrap">
-          {teacher.cefr_rationale || "—"}
-        </p>
-      </section>
+          <div className="break-after-page h-8" />
 
-      {!!teacher.preatech_vocab?.length && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">Pre-teach vocabulary</h2>
-          <ul className="list-disc pl-5">
-            {teacher.preatech_vocab!.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
-          </ul>
-        </section>
+          <section>
+            <h2 className="text-xl font-semibold mb-2">Teacher Panel</h2>
+            <div className="space-y-2">
+              {preview.teacher_panel?.cefr_rationale && (
+                <p><strong>CEFR rationale:</strong> {preview.teacher_panel.cefr_rationale}</p>
+              )}
+              {preview.teacher_panel?.sensitive_flags?.length ? (
+                <p><strong>Flagged content:</strong> {preview.teacher_panel.sensitive_flags.join(", ")}</p>
+              ) : null}
+              {preview.teacher_panel?.inclusive_notes?.length ? (
+                <p><strong>Inclusive language notes:</strong> {preview.teacher_panel.inclusive_notes.join("; ")}</p>
+              ) : null}
+              {preview.teacher_panel?.differentiation?.length ? (
+                <p><strong>Differentiation:</strong> {preview.teacher_panel.differentiation.join("; ")}</p>
+              ) : null}
+              {preview.teacher_panel?.preteach_vocab?.length ? (
+                <p><strong>Pre-teach vocab:</strong> {preview.teacher_panel.preteach_vocab.join(", ")}</p>
+              ) : null}
+              {preview.teacher_panel?.answers ? (
+                <details open>
+                  <summary><strong>Task answers</strong></summary>
+                  <pre className="whitespace-pre-wrap text-sm">
+                    {JSON.stringify(preview.teacher_panel.answers, null, 2)}
+                  </pre>
+                </details>
+              ) : null}
+              {preview.teacher_panel?.ld_panel ? (
+                <details open>
+                  <summary><strong>LD panel</strong></summary>
+                  <div className="whitespace-pre-wrap">{preview.teacher_panel.ld_panel}</div>
+                </details>
+              ) : null}
+              {"sources_verified" in (preview.teacher_panel ?? {}) && (
+                <p><strong>Sources verified:</strong> {preview.teacher_panel?.sources_verified ? "Yes" : "No"}</p>
+              )}
+              {preview.teacher_panel?.sources?.length ? (
+                <ul className="list-disc ml-5">
+                  {preview.teacher_panel.sources.map((s, i) => (
+                    <li key={i}>
+                      {s.title ? <span className="font-medium">{s.title}: </span> : null}
+                      {s.url ? <a className="text-blue-600 underline" href={s.url} target="_blank" rel="noreferrer">{s.url}</a> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </section>
+
+          <div className="mt-6 print:hidden">
+            <button
+              onClick={() => window.print()}
+              className="px-3 py-2 rounded border"
+            >
+              Print
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="p-3 border rounded">No preview data found. Go back and click <em>Generate preview</em> first.</div>
       )}
-
-      {/* tolerant to both spellings: "preteach_vocab" or "preatech_vocab" */}
-      {!teacher.preatech_vocab?.length && !!teacher.preteach_vocab?.length && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">Pre-teach vocabulary</h2>
-          <ul className="list-disc pl-5">
-            {teacher.preteach_vocab!.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {!!teacher.sensitive_flags?.length && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">Flagged sensitive content</h2>
-          <ul className="list-disc pl-5">
-            {teacher.sensitive_flags.map((x, i) => (
-              <li key={i}>{x}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {!!teacher.inclusive_notes?.length && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">Inclusive-language notes</h2>
-          <ul className="list-disc pl-5">
-            {teacher.inclusive_notes.map((x, i) => (
-              <li key={i}>{x}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {!!teacher.differentiation?.length && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">Suggested differentiation</h2>
-          <ul className="list-disc pl-5">
-            {teacher.differentiation.map((x, i) => (
-              <li key={i}>{x}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {!!teacher.sources?.length && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">Verified sources</h2>
-          <ul className="list-disc pl-5">
-            {teacher.sources.map((x, i) => (
-              <li key={i}>{x}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* LD / Accessibility panel (only if included at export) */}
-      {includeLD && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">LD / Accessibility notes</h2>
-          <ul className="list-disc pl-5">
-            {(teacher.differentiation?.length
-              ? teacher.differentiation
-              : [
-                  "Offer large-print version / high contrast.",
-                  "Allow extended time or split tasks into smaller chunks.",
-                  "Provide audio support or read-aloud options.",
-                ]
-            )!.map((x, i) => (
-              <li key={i}>{x}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {!!answersText && (
-        <section className="mt-4">
-          <h2 className="text-lg font-semibold">Answer key</h2>
-          <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded border">
-            {answersText}
-          </pre>
-        </section>
-      )}
-
-      {/* Page break before student pack */}
-      <div className="page-break" />
-
-      {/* ---- STUDENT PAGES ---- */}
-      <section>
-        <h1 className="text-2xl font-bold">Student Text</h1>
-        <p className="whitespace-pre-wrap leading-relaxed mt-2">
-          {result.student_text}
-        </p>
-      </section>
-
-      <div className="page-break" />
-
-      <section>
-        <h1 className="text-2xl font-bold">Exercises</h1>
-        {result.exercises?.length ? (
-          <ol className="list-decimal pl-6 space-y-2 mt-2">
-            {result.exercises.map((ex, i) => (
-              <li key={i} className="leading-relaxed">
-                <pre className="whitespace-pre-wrap text-sm">
-                  {typeof ex === "string" ? ex : JSON.stringify(ex, null, 2)}
-                </pre>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="mt-2 text-sm">No exercises returned.</p>
-        )}
-      </section>
-
-      <footer className="mt-8 text-xs text-gray-600">
-        <div>Source: {result.source || "pasted text"}</div>
-        <div>{result.credit || "Prepared by [Your Name]"}</div>
-      </footer>
-
-      {/* Minimal print styles */}
-      <style jsx global>{`
-        @media print {
-          .no-print {
-            display: none !important;
-          }
-          .page-break {
-            break-before: page;
-            page-break-before: always;
-          }
-          html, body {
-            background: #fff !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,12 +1,35 @@
-﻿function safeRenderExercise(ex: unknown, idx: number): JSX.Element | null {
-  if (ex === null || ex === undefined) return null;
+﻿"use client";
 
-  // primitives → <li>
-  if (typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean") {
+import React, { useState } from "react";
+
+type TeacherPanel = {
+  cefr_rationale?: string;
+  sensitive_flags?: string[];
+  inclusive_notes?: string[];
+  differentiation?: string[];
+  ld_panel?: string | null;
+  preteach_vocab?: string[];     // added per your request
+  answers?: Record<string, unknown>; // added per your request
+  sources_verified?: boolean;
+  sources?: Array<{ title?: string; url?: string }>;
+};
+
+type Preview = {
+  student_text?: string;
+  exercises?: any[];
+  teacher_panel?: TeacherPanel;
+};
+
+function safeRenderExercise(ex: any, idx: number): JSX.Element | null {
+  if (ex == null) return null;
+
+  const isPrimitive =
+    typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean";
+
+  if (isPrimitive) {
     return <li key={idx}>{String(ex)}</li>;
   }
 
-  // array → nested list
   if (Array.isArray(ex)) {
     return (
       <li key={idx}>
@@ -14,58 +37,44 @@
       </li>
     );
   }
-    const obj = ex as Record<string, unknown>;
-    const task = (obj.task as string | undefined) ?? undefined;
-    const questions = Array.isArray(obj.questions) ? (obj.questions as unknown[]) : [];
+
+  if (typeof ex === "object") {
+    // Common shapes: { task, questions, options, answer, ... }
+    const {
+      type,
+      task,
+      prompt,
+      text,
+      question,
+      questions,
+      options,
+      answer,
+      ...rest
+    } = ex as Record<string, unknown>;
+
+    const hasQuestions = Array.isArray(questions) && questions.length > 0;
+    const hasOptions = Array.isArray(options) && options.length > 0;
+    const hasRest = Object.keys(rest ?? {}).length > 0;
+
     return (
       <li key={idx}>
-        {task ? <strong>{task}</strong> : <em>Exercise</em>}
-        {questions.length > 0 && (
-          <ul>{questions.map((q, i) => safeRenderExercise(q, i))}</ul>
-        )}
-      </li>
-    );
-  }
-}
-
-/** SAFE exercise renderer (clean) */
-type Exercise =
-  | string
-  | number
-  | { task?: unknown; questions?: unknown[]; [k: string]: unknown }
-  | unknown[];
-
-
-"use client";
-import React, { useState } from 'react';
-
-
-/* === NORMALIZE_EXERCISES_HELPERS (injected) === */
-function normalizeExercises(list) {
-  if (Array.isArray(list)) return list;
-  if (list && typeof list === "object") return Object.values(list);
-  return [];
-}
-    const { type, task, prompt, text, question, questions, options, answer, ...rest } = ex;
-    return (
-      <li key={key}>
-        <div className="font-medium">{task ?? type ?? "Exercise"}</div>
+        <div className="font-medium">{String(task ?? type ?? "Exercise")}</div>
 
         {prompt && <div className="mb-1">{String(prompt)}</div>}
         {text && <div className="mb-1">{String(text)}</div>}
         {question && <div className="mb-1">Q: {String(question)}</div>}
 
-        {Array.isArray(questions) && questions.length > 0 && (
+        {hasQuestions && (
           <ol className="list-decimal ml-5">
-            {questions.map((q, i) => (
+            {(questions as any[]).map((q, i) => (
               <li key={i}>{safeRenderExercise(q, i)}</li>
             ))}
           </ol>
         )}
 
-        {Array.isArray(options) && options.length > 0 && (
+        {hasOptions && (
           <ul className="list-disc ml-5">
-            {options.map((o, i) => <li key={i}>{String(o)}</li>)}
+            {(options as any[]).map((o, i) => <li key={i}>{String(o)}</li>)}
           </ul>
         )}
 
@@ -73,291 +82,248 @@ function normalizeExercises(list) {
           <details className="mt-1">
             <summary>Answer</summary>
             <pre className="whitespace-pre-wrap text-sm">
-{(typeof answer === "string" || typeof answer === "number")
-  ? String(answer)
-  : JSON.stringify(answer, null, 2)}
+              {typeof answer === "string" || typeof answer === "number"
+                ? String(answer)
+                : JSON.stringify(answer, null, 2)}
             </pre>
           </details>
         )}
 
-        {Object.keys(rest ?? {}).length > 0 && (
+        {hasRest && (
           <details className="mt-1">
             <summary>More</summary>
-            <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(rest, null, 2)}</pre>
+            <pre className="whitespace-pre-wrap text-xs">
+              {JSON.stringify(rest, null, 2)}
+            </pre>
           </details>
         )}
       </li>
     );
   }
-}
-/* ===== SAFE EXERCISE RENDERERS (injected) ===== */
-type ExerciseShape =
-  | string
-  | number
 
-  }
-  if (Array.isArray(ex)) {
-    return (
-      <li key={idx}>
-        <ul className="list-disc pl-5">
-          {ex.map((item, i) => <li key={i}>{String(item)}</li>)}
-        </ul>
-      </li>
-    );
-  }
-  if (ex && typeof ex === "object") {
-    const obj = ex as Record<string, unknown>;
-    const task = obj.task as string | undefined;
-    const questions = (obj.questions as unknown[]) || [];
-    return (
-      <li key={idx} className="mb-3">
-        {task && <div className="font-semibold">{task}</div>}
-        {Array.isArray(questions) && questions.length > 0 && (
-          <ol className="list-decimal pl-6 space-y-1">
-            {questions.map((q, i) => <li key={i}>{String(q)}</li>)}
-          </ol>
-        )}
-        {!task && (!Array.isArray(questions) || questions.length === 0) && (
-          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
-            {JSON.stringify(ex, null, 2)}
-          </pre>
-        )}
-      </li>
-    );
-  }
+  // Fallback
   return <li key={idx}>{String(ex)}</li>;
 }
 
-function Exercises({ items }: { items: any }) {
-  return <>{(items ?? []).map(safeRenderExercise)}</>;
-}
-/* ===== end injected helpers ===== */
-type GenResponse = {
-  student_text: string;
-  exercises: string[];
-  source: string;
-  credit: string;
-  teacher_panel?: {
-    cefr_rationale?: string;
-    sensitive_content?: string[];
-    inclusive_language?: string[];
-    differentiation?: {
-      extra_support?: string;
-      fast_finishers?: string;
-      ld_support?: string;
-    };
-    verified_sources?: string[];
-  };
-};
-
-const CEFR_OPTS = ["A2", "B1", "B2", "C1", "C2"] as const;
-
-const EXAM_OPTS = [
-  "Cambridge A2",
-  "Cambridge B1",
-  "Cambridge B2",
-  "Cambridge C1",
-  "IELTS Academic",
-  "TOEFL iBT",
-] as const;
-
-const LOCALE_OPTS = [
-  { value: "IE", label: "Irish English" },
-  { value: "UK", label: "British English" },
-  { value: "US", label: "American English" },
-  { value: "ES", label: "Spanish (Spain)" },
-] as const;
-
-const SCHOOL_OPTS = [
-  { value: "PUBLIC", label: "Public / State" },
-  { value: "DEIS", label: "DEIS (Ireland)" },
-  { value: "PRIVATE", label: "Private" },
-  { value: "ADULT_ED", label: "Adult Ed." },
-] as const;
-
 export default function ClientEmbed() {
-  const [sourceText, setSourceText] = useState("");
-  const [cefr, setCefr] = useState<typeof CEFR_OPTS[number]>("B2");
-  const [exam, setExam] = useState<string>("Cambridge B2");
+  const [input, setInput] = useState("");
+  const [cefr, setCefr] = useState("B2");
+  const [exam, setExam] = useState("Cambridge B2");
   const [locale, setLocale] = useState("IE");
-  const [schoolType, setSchoolType] = useState("PUBLIC");
+  const [school, setSchool] = useState("Public");
   const [inclusive, setInclusive] = useState(true);
+  const [ldPanel, setLdPanel] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [out, setOut] = useState<GenResponse | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [showTeacher, setShowTeacher] = useState(false);
 
   async function onGenerate() {
     setError(null);
-    setOut(null);
     setLoading(true);
+    setPreview(null);
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: sourceText, cefr, exam, inclusive, locale, schoolType }),
+        cache: "no-store",
+        body: JSON.stringify({
+          input,
+          cefr,
+          exam,
+          locale,
+          school,
+          inclusive,
+          ld_support: ldPanel,
+        }),
       });
-      const txt = await res.text();
-      if (!res.ok) throw new Error(`Server ${res.status}: ${txt}`);
-      const data = JSON.parse(txt) as GenResponse;
-      setOut(data);
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`Server ${res.status}: ${txt || res.statusText}`);
+      }
+
+      const data = (await res.json()) as Preview;
+      setPreview(data);
+      setShowTeacher(true);
+
+      // save to localStorage for print/export page
+      if (typeof window !== "undefined") {
+        localStorage.setItem("aontas_preview", JSON.stringify(data));
+      }
     } catch (e: any) {
-      setError(e?.message ?? "Unknown error");
+      setError(e?.message || "Failed to generate.");
     } finally {
       setLoading(false);
     }
   }
 
   function onReset() {
-    setOut(null);
+    setPreview(null);
     setError(null);
+    setShowTeacher(false);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aontas_preview");
+    }
   }
 
   function onExport() {
-    if (!out) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    const styles = `
-      <style>
-        body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5;padding:24px}
-        h1,h2{margin:0 0 8px}
-        .page-break{page-break-after:always;border-top:1px dashed #ddd;margin:24px 0}
-        ul{margin:0;padding-left:20px}
-        ol{padding-left:20px}
-        code{background:#f6f6f6;padding:2px 4px;border-radius:4px}
-      </style>`;
-    const tp = out.teacher_panel;
-
-    win.document.write(`<html><head><title>Worksheet Export</title>${styles}</head><body>`);
-    win.document.write(`<h1>Student Text</h1><p>${(out.student_text ?? "").replace(/\n/g, "<br/>")}</p>`);
-    win.document.write(`<div class="page-break"></div>`);
-    win.document.write(`<h1>Exercises</h1><ol>${(out.exercises ?? []).map((x) => `<li>${x}</li>`).join("")}</ol>`);
-    win.document.write(`<div class="page-break"></div>`);
-    win.document.write(`<h1>Teacher Panel</h1>`);
-    if (tp?.cefr_rationale) win.document.write(`<h2>CEFR rationale</h2><p>${tp.cefr_rationale}</p>`);
-    if (tp?.sensitive_content?.length) win.document.write(`<h2>Flagged sensitive content</h2><ul>${tp.sensitive_content.map((s) => `<li>${s}</li>`).join("")}</ul>`);
-    if (tp?.inclusive_language?.length) win.document.write(`<h2>Inclusive-language notes</h2><ul>${tp.inclusive_language.map((s) => `<li>${s}</li>`).join("")}</ul>`);
-    if (tp?.differentiation) {
-      win.document.write(`<h2>Suggested differentiation</h2><ul>`);
-      if (tp.differentiation.extra_support) win.document.write(`<li><b>Extra support:</b> ${tp.differentiation.extra_support}</li>`);
-      if (tp.differentiation.fast_finishers) win.document.write(`<li><b>Fast finishers:</b> ${tp.differentiation.fast_finishers}</li>`);
-      if (tp.differentiation.ld_support) win.document.write(`<li><b>LD panel:</b> ${tp.differentiation.ld_support}</li>`);
-      win.document.write(`</ul>`);
-    }
-    if (out.source) win.document.write(`<p><b>Source:</b> ${out.source}</p>`);
-    if (out.credit) win.document.write(`<p><b>Credit:</b> ${out.credit}</p>`);
-    win.document.write(`</body></html>`);
-    win.document.close();
-    win.focus();
-    win.print();
+    // open the printable page; it will read from localStorage
+    window.open("/embed/print", "_blank");
   }
 
   return (
-    <div className="p-4 space-y-3 max-w-3xl">
-      <textarea
-        value={sourceText}
-        onChange={(e) => setSourceText(e.target.value)}
-        placeholder="Paste source text or a URL…"
-        className="w-full h-36 p-2 border rounded"
-      />
+    <div className="max-w-3xl w-full mx-auto">
+      {/* Controls */}
+      <div className="space-y-4">
+        <textarea
+          className="w-full border rounded p-2 min-h-[160px]"
+          placeholder="Paste article text or a URL..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+        />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <label className="flex flex-col text-sm">CEFR
-          <select className="border rounded p-1" value={cefr} onChange={(e) => setCefr(e.target.value as any)}>
-            {CEFR_OPTS.map((v) => (<option key={v} value={v}>{v}</option>))}
-          </select>
-        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="flex items-center gap-2">
+            <span className="w-28">CEFR</span>
+            <select className="border rounded p-1 flex-1" value={cefr} onChange={(e) => setCefr(e.target.value)}>
+              {["A1","A2","B1","B2","C1","C2"].map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </label>
 
-        <label className="flex flex-col text-sm">Exam
-          <select className="border rounded p-1" value={exam} onChange={(e) => setExam(e.target.value)}>
-            {EXAM_OPTS.map((v) => (<option key={v} value={v}>{v}</option>))}
-          </select>
-        </label>
+          <label className="flex items-center gap-2">
+            <span className="w-28">Exam</span>
+            <select className="border rounded p-1 flex-1" value={exam} onChange={(e) => setExam(e.target.value)}>
+              {["Cambridge B1","Cambridge B2","IELTS","TOEFL","Trinity","None"].map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </label>
 
-        <label className="flex flex-col text-sm">Locale
-          <select className="border rounded p-1" value={locale} onChange={(e) => setLocale(e.target.value)}>
-            {LOCALE_OPTS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-          </select>
-        </label>
+          <label className="flex items-center gap-2">
+            <span className="w-28">Locale</span>
+            <select className="border rounded p-1 flex-1" value={locale} onChange={(e) => setLocale(e.target.value)}>
+              {["IE","UK","US","ES"].map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </label>
 
-        <label className="flex flex-col text-sm">School type
-          <select className="border rounded p-1" value={schoolType} onChange={(e) => setSchoolType(e.target.value)}>
-            {SCHOOL_OPTS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-          </select>
-        </label>
+          <label className="flex items-center gap-2">
+            <span className="w-28">School</span>
+            <select className="border rounded p-1 flex-1" value={school} onChange={(e) => setSchool(e.target.value)}>
+              {["Public","Private","Exam Prep"].map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </label>
 
-        <label className="flex items-center gap-2 text-sm col-span-2">
-          <input type="checkbox" checked={inclusive} onChange={(e) => setInclusive(e.target.checked)} />
-          Inclusive profile
-        </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={inclusive} onChange={(e) => setInclusive(e.target.checked)} />
+            <span>Inclusive language</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={ldPanel} onChange={(e) => setLdPanel(e.target.checked)} />
+            <span>Include LD panel</span>
+          </label>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onGenerate}
+            disabled={loading || !input.trim()}
+            className="px-3 py-2 rounded bg-black text-white disabled:opacity-50"
+          >
+            {loading ? "Generating…" : "Generate preview"}
+          </button>
+          <button onClick={onReset} className="px-3 py-2 rounded border">
+            Reset
+          </button>
+          <button onClick={onExport} disabled={!preview} className="px-3 py-2 rounded border disabled:opacity-50">
+            Export (print)
+          </button>
+        </div>
       </div>
 
-      <div className="flex gap-2">
-        <button onClick={onGenerate} disabled={loading} className="px-3 py-2 rounded bg-black text-white">
-          {loading ? "Generating…" : "Generate preview"}
-        </button>
-        <button onClick={onReset} className="px-3 py-2 rounded border">Reset preview</button>
-        <button onClick={onExport} disabled={!out} className="px-3 py-2 rounded border">Export (PDF/Print)</button>
-      </div>
+      {/* Errors */}
+      {error && (
+        <div className="mt-4 p-3 border border-red-300 text-red-700 rounded">
+          {error}
+        </div>
+      )}
 
-      {error && <pre className="text-red-600 whitespace-pre-wrap">{error}</pre>}
-
-      {out && (
-        <div className="space-y-4">
-          <h2 className="font-semibold text-lg">Student text (preview)</h2>
-          <p className="whitespace-pre-wrap">{out.student_text}</p>
-
-          <h3 className="font-semibold">Exercises</h3>
-          <ol className="list-decimal pl-5 space-y-1">
-            {(out.exercises ?? []).map((e, i) => (<li key={i}>{e}</li>))}
-          </ol>
-
-          {out.teacher_panel && (
-            <details className="border rounded p-3">
-              <summary className="cursor-pointer font-medium">Teacher Panel</summary>
-              <div className="mt-2 space-y-2">
-                {out.teacher_panel.cefr_rationale && (
-                  <section><b>CEFR rationale:</b> <p>{out.teacher_panel.cefr_rationale}</p></section>
-                )}
-                {out.teacher_panel.sensitive_content?.length ? (
-                  <section><b>Sensitive content:</b>
-                    <ul className="list-disc pl-5">{out.teacher_panel.sensitive_content.map((s: string, i: number) => (<li key={i}>{s}</li>))}</ul>
-                  </section>
-                ) : null}
-                {out.teacher_panel.inclusive_language?.length ? (
-                  <section><b>Inclusive-language notes:</b>
-                    <ul className="list-disc pl-5">{out.teacher_panel.inclusive_language.map((s: string, i: number) => (<li key={i}>{s}</li>))}</ul>
-                  </section>
-                ) : null}
-                {out.teacher_panel.differentiation && (
-                  <section><b>Differentiation:</b>
-                    <ul className="list-disc pl-5">
-                      {out.teacher_panel.differentiation.extra_support && <li><b>Extra support:</b> {out.teacher_panel.differentiation.extra_support}</li>}
-                      {out.teacher_panel.differentiation.fast_finishers && <li><b>Fast finishers:</b> {out.teacher_panel.differentiation.fast_finishers}</li>}
-                      {out.teacher_panel.differentiation.ld_support && <li><b>LD panel:</b> {out.teacher_panel.differentiation.ld_support}</li>}
-                    </ul>
-                  </section>
-                )}
+      {/* Preview */}
+      {preview && (
+        <div className="mt-8 space-y-6">
+          <section>
+            <h2 className="text-xl font-semibold mb-2">Student worksheet</h2>
+            {preview.student_text && (
+              <div className="prose max-w-none whitespace-pre-wrap mb-4">
+                {preview.student_text}
               </div>
-            </details>
-          )}
+            )}
+
+            <h3 className="font-semibold mb-1">Exercises</h3>
+            <ul className="list-disc ml-5">
+              {(preview.exercises ?? []).map((ex, i) => safeRenderExercise(ex, i))}
+            </ul>
+          </section>
+
+          {/* Teacher panel */}
+          <section>
+            <button
+              className="px-3 py-2 rounded border"
+              onClick={() => setShowTeacher(!showTeacher)}
+            >
+              {showTeacher ? "Hide" : "Show"} Teacher Panel
+            </button>
+
+            {showTeacher && (
+              <div className="mt-3 p-3 border rounded space-y-2 bg-gray-50">
+                <h3 className="font-semibold">Teacher Panel</h3>
+                {preview.teacher_panel?.cefr_rationale && (
+                  <p><strong>CEFR rationale:</strong> {preview.teacher_panel.cefr_rationale}</p>
+                )}
+                {preview.teacher_panel?.sensitive_flags?.length ? (
+                  <p><strong>Flagged content:</strong> {preview.teacher_panel.sensitive_flags.join(", ")}</p>
+                ) : null}
+                {preview.teacher_panel?.inclusive_notes?.length ? (
+                  <p><strong>Inclusive language notes:</strong> {preview.teacher_panel.inclusive_notes.join("; ")}</p>
+                ) : null}
+                {preview.teacher_panel?.differentiation?.length ? (
+                  <p><strong>Differentiation:</strong> {preview.teacher_panel.differentiation.join("; ")}</p>
+                ) : null}
+                {preview.teacher_panel?.preteach_vocab?.length ? (
+                  <p><strong>Pre-teach vocab:</strong> {preview.teacher_panel.preteach_vocab.join(", ")}</p>
+                ) : null}
+                {preview.teacher_panel?.answers ? (
+                  <details>
+                    <summary><strong>Task answers</strong></summary>
+                    <pre className="whitespace-pre-wrap text-sm">
+                      {JSON.stringify(preview.teacher_panel.answers, null, 2)}
+                    </pre>
+                  </details>
+                ) : null}
+                {ldPanel && preview.teacher_panel?.ld_panel ? (
+                  <details>
+                    <summary><strong>LD panel</strong></summary>
+                    <div className="whitespace-pre-wrap">{preview.teacher_panel.ld_panel}</div>
+                  </details>
+                ) : null}
+                {"sources_verified" in (preview.teacher_panel ?? {}) && (
+                  <p><strong>Sources verified:</strong> {preview.teacher_panel?.sources_verified ? "Yes" : "No"}</p>
+                )}
+                {preview.teacher_panel?.sources?.length ? (
+                  <ul className="list-disc ml-5">
+                    {preview.teacher_panel.sources.map((s, i) => (
+                      <li key={i}>
+                        {s.title ? <span className="font-medium">{s.title}: </span> : null}
+                        {s.url ? <a className="text-blue-600 underline" href={s.url} target="_blank" rel="noreferrer">{s.url}</a> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
