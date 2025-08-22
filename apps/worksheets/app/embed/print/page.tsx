@@ -1,6 +1,81 @@
 ﻿"use client";
 
-import React, { useEffect, useState } from 'react';
+
+/* === NORMALIZE_EXERCISES_HELPERS (injected) === */
+function normalizeExercises(list) {
+  if (Array.isArray(list)) return list;
+  if (list && typeof list === "object") return Object.values(list);
+  return [];
+}
+
+function renderExercise(ex, idx) {
+  if (ex === null || ex === undefined) return null;
+  const key = idx ?? Math.random();
+
+  // Primitive
+  if (typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean") {
+    return <li key={key}>{String(ex)}</li>;
+  }
+
+  // Array → list
+  if (Array.isArray(ex)) {
+    return (
+      <li key={key}>
+        <ul>{ex.map((e, i) => renderExercise(e, i))}</ul>
+      </li>
+    );
+  }
+
+  // Object → show core fields, then optional details
+  if (typeof ex === "object") {
+    const { type, task, prompt, text, question, questions, options, answer, ...rest } = ex;
+    return (
+      <li key={key}>
+        <div className="font-medium">{task ?? type ?? "Exercise"}</div>
+
+        {prompt && <div className="mb-1">{String(prompt)}</div>}
+        {text && <div className="mb-1">{String(text)}</div>}
+        {question && <div className="mb-1">Q: {String(question)}</div>}
+
+        {Array.isArray(questions) && questions.length > 0 && (
+          <ol className="list-decimal ml-5">
+            {questions.map((q, i) => (
+              <li key={i}>{renderExercise(q, i)}</li>
+            ))}
+          </ol>
+        )}
+
+        {Array.isArray(options) && options.length > 0 && (
+          <ul className="list-disc ml-5">
+            {options.map((o, i) => <li key={i}>{String(o)}</li>)}
+          </ul>
+        )}
+
+        {answer !== undefined && (
+          <details className="mt-1">
+            <summary>Answer</summary>
+            <pre className="whitespace-pre-wrap text-sm">
+{(typeof answer === "string" || typeof answer === "number")
+  ? String(answer)
+  : JSON.stringify(answer, null, 2)}
+            </pre>
+          </details>
+        )}
+
+        {Object.keys(rest ?? {}).length > 0 && (
+          <details className="mt-1">
+            <summary>More</summary>
+            <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(rest, null, 2)}</pre>
+          </details>
+        )}
+      </li>
+    );
+  }
+
+  // Fallback
+  return <li key={key}>{String(ex)}</li>;
+}
+import React, { useEffect, useState } from "react";
 /* ===== SAFE EXERCISE RENDERERS (injected) ===== */
 type ExerciseShape =
   | string
@@ -293,6 +368,7 @@ export default function PrintPage() {
     </div>
   );
 }
+
 
 
 
