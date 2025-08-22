@@ -1,7 +1,56 @@
 ﻿"use client";
+import React from 'react';
 
 import React, { useState } from "react";
 
+
+/* ===== SAFE EXERCISE RENDERERS (injected) ===== */
+type ExerciseShape =
+  | string
+  | number
+  | { task?: string; questions?: unknown[]; [k: string]: unknown }
+  | unknown[];
+
+function renderExercise(ex: ExerciseShape, idx: number) {
+  if (typeof ex === "string" || typeof ex === "number") {
+    return <li key={idx}>{String(ex)}</li>;
+  }
+  if (Array.isArray(ex)) {
+    return (
+      <li key={idx}>
+        <ul className="list-disc pl-5">
+          {ex.map((item, i) => <li key={i}>{String(item)}</li>)}
+        </ul>
+      </li>
+    );
+  }
+  if (ex && typeof ex === "object") {
+    const obj = ex as Record<string, unknown>;
+    const task = obj.task as string | undefined;
+    const questions = (obj.questions as unknown[]) || [];
+    return (
+      <li key={idx} className="mb-3">
+        {task && <div className="font-semibold">{task}</div>}
+        {Array.isArray(questions) && questions.length > 0 && (
+          <ol className="list-decimal pl-6 space-y-1">
+            {questions.map((q, i) => <li key={i}>{String(q)}</li>)}
+          </ol>
+        )}
+        {!task && (!Array.isArray(questions) || questions.length === 0) && (
+          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
+            {JSON.stringify(ex, null, 2)}
+          </pre>
+        )}
+      </li>
+    );
+  }
+  return <li key={idx}>{String(ex)}</li>;
+}
+
+function Exercises({ items }: { items: any }) {
+  return <>{(items ?? []).map(renderExercise)}</>;
+}
+/* ===== end injected helpers ===== */
 type GenResponse = {
   student_text: string;
   exercises: string[];
@@ -216,3 +265,4 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
