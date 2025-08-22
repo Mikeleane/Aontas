@@ -1,9 +1,6 @@
 ﻿"use client";
 import React from 'react';
 
-import React, { useState } from "react";
-
-
 /* ===== SAFE EXERCISE RENDERERS (injected) ===== */
 type ExerciseShape =
   | string
@@ -265,4 +262,5 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
