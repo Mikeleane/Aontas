@@ -1,10 +1,19 @@
-﻿function safeRenderExercise(ex, idx) {
-  if (ex == null) return <li key={idx}>—</li>;
+﻿/** SAFE exercise renderer (clean) */
+type Exercise =
+  | string
+  | number
+  | { task?: unknown; questions?: unknown[]; [k: string]: unknown }
+  | unknown[];
 
-  const primitive = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+function safeRenderExercise(ex: unknown, idx: number): JSX.Element | null {
+  if (ex === null || ex === undefined) return null;
 
-  if (primitive(ex)) return <li key={idx}>{String(ex)}</li>;
+  // primitives → plain <li>
+  if (typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean") {
+    return <li key={idx}>{String(ex)}</li>;
+  }
 
+  // array → nested list
   if (Array.isArray(ex)) {
     return (
       <li key={idx}>
@@ -13,29 +22,23 @@
     );
   }
 
-  if (typeof ex === 'object') {
-    const o = ex;
-
-    // common shapes: { task, questions|items|steps }
-    const list = (Array.isArray(o?.questions) && o.questions)
-              || (Array.isArray(o?.items)     && o.items)
-              || (Array.isArray(o?.steps)     && o.steps)
-              || null;
-
-    if (list) {
-      return (
-        <li key={idx}>
-          {o?.task ? <strong>{String(o.task)}</strong> : null}
-          <ul>{list.map((child, i) => safeRenderExercise(child, i))}</ul>
-        </li>
-      );
-    }
-
-    try { return <li key={idx}>{JSON.stringify(o)}</li>; }
-    catch { return <li key={idx}>[object]</li>; }
+  // object → task + questions[]
+  if (typeof ex === "object") {
+    const obj = ex as Record<string, unknown>;
+    const task = (obj.task as string | undefined) ?? undefined;
+    const questions = Array.isArray(obj.questions) ? (obj.questions as unknown[]) : [];
+    return (
+      <li key={idx}>
+        {task ? <strong>{task}</strong> : <em>Exercise</em>}
+        {questions.length > 0 && (
+          <ul>{questions.map((q, i) => safeRenderExercise(q, i))}</ul>
+        )}
+      </li>
+    );
   }
 
-  return <li key={idx}>[unsupported]</li>;
+  // fallback
+  return <li key={idx}>{String(ex)}</li>;
 }
 "use client";
 import React, { useState } from 'react';
@@ -106,7 +109,7 @@ function normalizeExercises(list) {
   }
 
   // Fallback
-  return <li key={key}>{String(ex)}</li>;
+  return <li key={key}return <li key={idx}>{String(ex)}</li>;
 }
 /* ===== SAFE EXERCISE RENDERERS (injected) ===== */
 type ExerciseShape =
@@ -364,6 +367,10 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
+
+
+
 
 
 
