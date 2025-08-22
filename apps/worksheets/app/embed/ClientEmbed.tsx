@@ -1,4 +1,44 @@
-﻿"use client";
+﻿function safeRenderExercise(ex, idx) {
+  if (ex == null) return <li key={idx}>—</li>;
+
+  const primitive = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+
+  if (primitive(ex)) return <li key={idx}>{String(ex)}</li>;
+
+  if (Array.isArray(ex)) {
+    return (
+      <li key={idx}>
+        <ul>{ex.map((child, i) => safeRenderExercise(child, i))}</ul>
+      </li>
+    );
+  }
+
+  if (typeof ex === 'object') {
+    const o = ex;
+
+    // common shapes: { task, questions|items|steps }
+    const list = (Array.isArray(o?.questions) && o.questions)
+              || (Array.isArray(o?.items)     && o.items)
+              || (Array.isArray(o?.steps)     && o.steps)
+              || null;
+
+    if (list) {
+      return (
+        <li key={idx}>
+          {o?.task ? <strong>{String(o.task)}</strong> : null}
+          <ul>{list.map((child, i) => safeRenderExercise(child, i))}</ul>
+        </li>
+      );
+    }
+
+    try { return <li key={idx}>{JSON.stringify(o)}</li>; }
+    catch { return <li key={idx}>[object]</li>; }
+  }
+
+  return <li key={idx}>[unsupported]</li>;
+}
+"use client";
+import React, { useState } from 'react';
 
 
 /* === NORMALIZE_EXERCISES_HELPERS (injected) === */
@@ -8,13 +48,7 @@ function normalizeExercises(list) {
   return [];
 }
 
-function safeRenderExercise(ex, idx) {
-  if (ex === null || ex === undefined) return null;
-  const key = idx ?? Math.random();
-
-  // Primitive
-  if (typeof ex === "string" || typeof ex === "number" || typeof ex === "boolean") {
-    return <li key={key}>{String(ex)}</li>;
+>{String(ex)}</li>;
   }
 
   // Array → list
@@ -75,13 +109,10 @@ function safeRenderExercise(ex, idx) {
   // Fallback
   return <li key={key}>{String(ex)}</li>;
 }
-import React, { useEffect, useState } from "react";
 /* ===== SAFE EXERCISE RENDERERS (injected) ===== */
 type ExerciseShape =
   | string
   | number
-  | { task?: string; questions?: unknown[]; [k: string]: unknown }
-  | unknown[];
 
 >{String(ex)}</li>;
   }
@@ -335,6 +366,7 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
 
 
