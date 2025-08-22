@@ -48,7 +48,6 @@ function normalizeExercises(list) {
   return [];
 }
 
->{String(ex)}</li>;
   }
 
   // Array → list
@@ -114,7 +113,6 @@ type ExerciseShape =
   | string
   | number
 
->{String(ex)}</li>;
   }
   if (Array.isArray(ex)) {
     return (
@@ -366,6 +364,7 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
 
 
