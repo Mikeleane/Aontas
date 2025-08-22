@@ -1,8 +1,7 @@
-export const runtime = "edge";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export async function GET() {
-  return new Response(
-    JSON.stringify({ hasKey: !!process.env.OPENAI_API_KEY }),
-    { headers: { "Content-Type": "application/json" } }
-  );
+  return Response.json({ ok: true, ts: new Date().toISOString() });
 }

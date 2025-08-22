@@ -1,94 +1,250 @@
 ﻿"use client";
-import React, { useEffect, useState } from "react";
-import TeacherPanel from "../TeacherPanel";
 
-type Exercise = { type: string; prompt?: string; items?: any[] };
-type GenResponse = {
-  student_text?: string;
-  exercises?: Exercise[];
-  // teacher fields (may or may not be present)
+import React, { useEffect, useState } from "react";
+
+/** Keep types tolerant — we render defensively */
+type TeacherPanel = {
   cefr_rationale?: string;
   sensitive_flags?: string[];
   inclusive_notes?: string[];
   differentiation?: string[];
+  sources?: string[];
   preteach_vocab?: string[];
-  answer_key?: string[];
-  sources?: { title?: string; url: string }[];
+  answers?: Record<string, unknown> | string;
+};
+
+type GenResponse = {
+  student_text: string;
+  exercises: any[];
+  source?: string;
+  credit?: string;
+  teacher?: TeacherPanel;
+};
+
+type ExportBlob = {
+  result: GenResponse;
+  includeLD?: boolean;
+  cefr?: string;
+  exam?: string;
+  locale?: string;
 };
 
 export default function PrintPage() {
-  const [data, setData] = useState<GenResponse | null>(null);
-  const [includeLD, setIncludeLD] = useState<boolean>(false);
+  const [payload, setPayload] = useState<ExportBlob | null>(null);
 
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("aontasExport");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setData(parsed.result ?? parsed); // support either {result,...} or plain
-        setIncludeLD(!!parsed.includeLD);
-      }
-    } catch {}
+      if (raw) setPayload(JSON.parse(raw));
+    } catch {
+      // ignore
+    }
   }, []);
 
-  if (!data) {
+  if (!payload?.result) {
     return (
-      <div className="p-8">
-        <h1 className="text-xl font-bold mb-2">Nothing to export</h1>
-        <p>Open the generator, click <em>Export</em>—then you can print or save as PDF.</p>
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="no-print mb-6">
+          <a
+            href="/embed"
+            className="inline-block rounded border px-3 py-2"
+          >
+            ← Back to generator
+          </a>
+        </div>
+        <p>Nothing to print. Generate a worksheet and click Export again.</p>
       </div>
     );
   }
 
-  return (
-    <div className="p-8 print:p-0">
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          .page-break { page-break-before: always; break-before: page; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-        .title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
-        .subtle { color: #555; }
-      `}</style>
+  const { result, includeLD, cefr, exam, locale } = payload;
+  const teacher = result.teacher ?? {};
+  const answersText =
+    typeof teacher.answers === "string"
+      ? teacher.answers
+      : teacher.answers
+      ? JSON.stringify(teacher.answers, null, 2)
+      : "";
 
-      <div className="no-print mb-4 flex gap-3">
-        <button onClick={() => window.print()} className="px-3 py-2 rounded bg-black text-white">
-          Print / Save PDF
+  return (
+    <div className="p-6 max-w-4xl mx-auto print:p-0">
+      {/* On-screen toolbar (hidden when printing) */}
+      <div className="no-print flex items-center gap-2 mb-6">
+        <button
+          onClick={() => window.print()}
+          className="rounded bg-black text-white px-3 py-2"
+        >
+          Print / Save as PDF
         </button>
+        <a
+          href="/embed"
+          className="rounded border px-3 py-2"
+        >
+          Back to generator
+        </a>
       </div>
 
-      {/* Student view */}
-      <section>
-        <div className="title">Student Text</div>
-        <div className="whitespace-pre-wrap">{data.student_text || "—"}</div>
+      {/* ---- TEACHER PACK ---- */}
+      <header>
+        <h1 className="text-2xl font-bold">Teacher Pack</h1>
+        <p className="text-sm text-gray-600">
+          {exam || "Exam"} • {cefr || "CEFR"} • {locale || "Locale"}
+        </p>
+      </header>
 
-        {data.exercises?.length ? (
-          <div className="mt-6">
-            <div className="title">Exercises</div>
-            {data.exercises.map((ex, i) => (
-              <div key={i} className="mb-4">
-                <div className="font-semibold">{ex.type}</div>
-                {ex.prompt ? <div className="mb-1">{ex.prompt}</div> : null}
-                {/* Keep simple; students print their sheet without answers */}
-              </div>
+      <section className="mt-4">
+        <h2 className="text-lg font-semibold">CEFR rationale</h2>
+        <p className="whitespace-pre-wrap">
+          {teacher.cefr_rationale || "—"}
+        </p>
+      </section>
+
+      {!!teacher.preatech_vocab?.length && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">Pre-teach vocabulary</h2>
+          <ul className="list-disc pl-5">
+            {teacher.preatech_vocab!.map((w, i) => (
+              <li key={i}>{w}</li>
             ))}
-          </div>
-        ) : null}
+          </ul>
+        </section>
+      )}
+
+      {/* tolerant to both spellings: "preteach_vocab" or "preatech_vocab" */}
+      {!teacher.preatech_vocab?.length && !!teacher.preteach_vocab?.length && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">Pre-teach vocabulary</h2>
+          <ul className="list-disc pl-5">
+            {teacher.preteach_vocab!.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!!teacher.sensitive_flags?.length && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">Flagged sensitive content</h2>
+          <ul className="list-disc pl-5">
+            {teacher.sensitive_flags.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!!teacher.inclusive_notes?.length && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">Inclusive-language notes</h2>
+          <ul className="list-disc pl-5">
+            {teacher.inclusive_notes.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!!teacher.differentiation?.length && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">Suggested differentiation</h2>
+          <ul className="list-disc pl-5">
+            {teacher.differentiation.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!!teacher.sources?.length && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">Verified sources</h2>
+          <ul className="list-disc pl-5">
+            {teacher.sources.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* LD / Accessibility panel (only if included at export) */}
+      {includeLD && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">LD / Accessibility notes</h2>
+          <ul className="list-disc pl-5">
+            {(teacher.differentiation?.length
+              ? teacher.differentiation
+              : [
+                  "Offer large-print version / high contrast.",
+                  "Allow extended time or split tasks into smaller chunks.",
+                  "Provide audio support or read-aloud options.",
+                ]
+            )!.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!!answersText && (
+        <section className="mt-4">
+          <h2 className="text-lg font-semibold">Answer key</h2>
+          <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded border">
+            {answersText}
+          </pre>
+        </section>
+      )}
+
+      {/* Page break before student pack */}
+      <div className="page-break" />
+
+      {/* ---- STUDENT PAGES ---- */}
+      <section>
+        <h1 className="text-2xl font-bold">Student Text</h1>
+        <p className="whitespace-pre-wrap leading-relaxed mt-2">
+          {result.student_text}
+        </p>
       </section>
 
-      {/* Teacher panel on a new page */}
-      <section className="page-break mt-6">
-        <TeacherPanel data={data} />
-        {includeLD ? (
-          <div className="mt-8">
-            <h3 className="font-semibold text-lg mb-1">Learning Diversity (LD) Notes</h3>
-            <p className="subtle">
-              (Include your LD guidance here—this block is shown because “LD panel” was selected before export.)
-            </p>
-          </div>
-        ) : null}
+      <div className="page-break" />
+
+      <section>
+        <h1 className="text-2xl font-bold">Exercises</h1>
+        {result.exercises?.length ? (
+          <ol className="list-decimal pl-6 space-y-2 mt-2">
+            {result.exercises.map((ex, i) => (
+              <li key={i} className="leading-relaxed">
+                <pre className="whitespace-pre-wrap text-sm">
+                  {typeof ex === "string" ? ex : JSON.stringify(ex, null, 2)}
+                </pre>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-2 text-sm">No exercises returned.</p>
+        )}
       </section>
+
+      <footer className="mt-8 text-xs text-gray-600">
+        <div>Source: {result.source || "pasted text"}</div>
+        <div>{result.credit || "Prepared by [Your Name]"}</div>
+      </footer>
+
+      {/* Minimal print styles */}
+      <style jsx global>{`
+        @media print {
+          .no-print {
+            display: none !important;
+          }
+          .page-break {
+            break-before: page;
+            page-break-before: always;
+          }
+          html, body {
+            background: #fff !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
+
