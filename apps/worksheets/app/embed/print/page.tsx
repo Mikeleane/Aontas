@@ -8,7 +8,7 @@ function normalizeExercises(list) {
   return [];
 }
 
-function renderExercise(ex, idx) {
+function safeRenderExercise(ex, idx) {
   if (ex === null || ex === undefined) return null;
   const key = idx ?? Math.random();
 
@@ -21,7 +21,7 @@ function renderExercise(ex, idx) {
   if (Array.isArray(ex)) {
     return (
       <li key={key}>
-        <ul>{ex.map((e, i) => renderExercise(e, i))}</ul>
+        <ul>{ex.map((e, i) => safeRenderExercise(e, i))}</ul>
       </li>
     );
   }
@@ -40,7 +40,7 @@ function renderExercise(ex, idx) {
         {Array.isArray(questions) && questions.length > 0 && (
           <ol className="list-decimal ml-5">
             {questions.map((q, i) => (
-              <li key={i}>{renderExercise(q, i)}</li>
+              <li key={i}>{safeRenderExercise(q, i)}</li>
             ))}
           </ol>
         )}
@@ -83,7 +83,7 @@ type ExerciseShape =
   | { task?: string; questions?: unknown[]; [k: string]: unknown }
   | unknown[];
 
-function renderExercise(ex: ExerciseShape, idx: number) {
+function safeRenderExercise(ex: ExerciseShape, idx: number) {
   if (typeof ex === "string" || typeof ex === "number") {
     return <li key={idx}>{String(ex)}</li>;
   }
@@ -120,7 +120,7 @@ function renderExercise(ex: ExerciseShape, idx: number) {
 }
 
 function Exercises({ items }: { items: any }) {
-  return <>{(items ?? []).map(renderExercise)}</>;
+  return <>{(items ?? []).map(safeRenderExercise)}</>;
 }
 /* ===== end injected helpers ===== */
 /** Keep types tolerant — we render defensively */
@@ -368,6 +368,7 @@ export default function PrintPage() {
     </div>
   );
 }
+
 
 
 
