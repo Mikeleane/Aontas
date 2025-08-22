@@ -83,9 +83,7 @@ type ExerciseShape =
   | { task?: string; questions?: unknown[]; [k: string]: unknown }
   | unknown[];
 
-function safeRenderExercise(ex: ExerciseShape, idx: number) {
-  if (typeof ex === "string" || typeof ex === "number") {
-    return <li key={idx}>{String(ex)}</li>;
+>{String(ex)}</li>;
   }
   if (Array.isArray(ex)) {
     return (
@@ -337,6 +335,7 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
 
 
