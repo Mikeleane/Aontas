@@ -14,9 +14,6 @@
       </li>
     );
   }
-
-  // object → task + questions[]
-  if (typeof ex === "object") {
     const obj = ex as Record<string, unknown>;
     const task = (obj.task as string | undefined) ?? undefined;
     const questions = Array.isArray(obj.questions) ? (obj.questions as unknown[]) : [];
@@ -29,9 +26,6 @@
       </li>
     );
   }
-
-  // fallback
-  return <li key={idx}>{String(ex)}</li>;
 }
 
 /** SAFE exercise renderer (clean) */
@@ -52,10 +46,6 @@ function normalizeExercises(list) {
   if (list && typeof list === "object") return Object.values(list);
   return [];
 }
-  }
-
-  // Object → show core fields, then optional details
-  if (typeof ex === "object") {
     const { type, task, prompt, text, question, questions, options, answer, ...rest } = ex;
     return (
       <li key={key}>
@@ -387,6 +377,7 @@ export default function PrintPage() {
     </div>
   );
 }
+
 
 
 
