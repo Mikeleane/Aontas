@@ -108,15 +108,6 @@ function safeRenderExercise(ex: any, idx: number): JSX.Element | null {
 
 export default function ClientEmbed() {
   
-        param($m)
-@"
-$($m.Value)
-  // Make available to print page persistence
-  useEffect(() => {
-    try { (window as any).advancedPayload = advancedPayload; } catch {}
-  }, [advancedPayload]);
-
-"@
         const [input, setInput] = useState("");
   const [cefr, setCefr] = useState("B2");
   const [exam, setExam] = useState("Cambridge B2");
@@ -340,6 +331,7 @@ $($m.Value)
     </div>
   );
 }
+
 
 
 
