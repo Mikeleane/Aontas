@@ -107,6 +107,7 @@ function safeRenderExercise(ex: any, idx: number): JSX.Element | null {
 }
 
 export default function ClientEmbed() {
+  const [advancedPayload, setAdvancedPayload] = React.useState<any>({});
   const [input, setInput] = useState("");
   const [cefr, setCefr] = useState("B2");
   const [exam, setExam] = useState("Cambridge B2");
@@ -129,7 +130,7 @@ export default function ClientEmbed() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ ...(typeof advancedPayload === "object" && advancedPayload ? advancedPayload : {}),  ...advancedPayload, 
+        body: JSON.stringify({ ...advancedPayload,  ...(typeof advancedPayload === "object" && advancedPayload ? advancedPayload : {}),  ...advancedPayload, 
           input,
           cefr,
           exam,
@@ -328,6 +329,7 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
 
 
