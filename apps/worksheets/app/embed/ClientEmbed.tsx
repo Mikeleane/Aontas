@@ -231,6 +231,9 @@ export default function ClientEmbed() {
             disabled={loading || !input.trim()}
             className="px-3 py-2 rounded bg-black text-white disabled:opacity-50"
           >
+      {/* ADVANCED_PANEL_START */}
+      <AdvancedPanel onPayloadChange={setAdvancedPayload} />
+      {/* ADVANCED_PANEL_END */}
             {loading ? "Generating…" : "Generate preview"}
           </button>
           <button onClick={onReset} className="px-3 py-2 rounded border">
@@ -328,6 +331,8 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
+
 
 
 
