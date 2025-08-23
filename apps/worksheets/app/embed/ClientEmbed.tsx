@@ -1,4 +1,6 @@
-﻿"use client";
+﻿import React, { useEffect, useState } from 'react';
+import AdvancedPanel from './AdvancedPanel';
+"use client";
 
 import AdvancedPanel from "./AdvancedPanel";
 import React, { useEffect, useState } from "react";
@@ -107,6 +109,7 @@ function safeRenderExercise(ex: any, idx: number): JSX.Element | null {
 }
 
 export default function ClientEmbed() {
+  const [advancedPayload, setAdvancedPayload] = useState<any>({});
   
         const [input, setInput] = useState("");
   const [cefr, setCefr] = useState("B2");
@@ -331,6 +334,7 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
 
 
