@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import AdvancedPanel from "./AdvancedPanel";
 import React, { useState } from "react";
 
 type TeacherPanel = {
@@ -327,5 +328,6 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
 
 
