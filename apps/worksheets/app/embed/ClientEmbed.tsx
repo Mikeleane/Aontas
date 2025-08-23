@@ -128,7 +128,7 @@ export default function ClientEmbed() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({
+        body: JSON.stringify({ ...advancedPayload, 
           input,
           cefr,
           exam,
@@ -327,3 +327,4 @@ export default function ClientEmbed() {
     </div>
   );
 }
+
